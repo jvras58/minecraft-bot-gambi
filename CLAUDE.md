@@ -1,6 +1,6 @@
 # Minecraft Bot - Development Context
 
-Autonomous Minecraft bot that uses Gambiarra hub as its LLM backend.
+Autonomous Minecraft bot that uses Gambi hub as its LLM backend.
 
 ## Tech Stack
 
@@ -24,13 +24,6 @@ AgentLoop (3s cycle)
   └── MemoryManager.recordAction()           → update ring buffer
 ```
 
-## Key Decisions
-
-- **No LangChain**: Direct fetch to Gambiarra hub's OpenAI-compatible API
-- **No Prisma/DB**: Metrics removed; if needed later, use Gambiarra's SSE events
-- **No systeminformation**: Hardware monitoring removed
-- **Bun-native**: Uses Bun's built-in .env loading, no dotenv needed
-
 ## Running
 
 ```bash
@@ -38,11 +31,10 @@ AgentLoop (3s cycle)
 bun run --filter minecraft-bot dev
 
 # Or directly
-cd apps/minecraft-bot && bun run dev
+cd minecraft-bot && bun run dev
 ```
 
 ## Prerequisites
 
 1. Minecraft Java server running
 2. Gambiarra hub running with at least one LLM participant in a room
-3. `.env` configured with `GAMBIARRA_ROOM_CODE`
