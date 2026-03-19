@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   // --room é obrigatório
   if (!args.room) {
     console.error('❌ Room code obrigatório!\n');
-    console.error('   Crie uma sala com: gambiarra create --name "Minecraft AI"');
+    console.error('   Crie uma sala com: gambi create --name "Minecraft AI"');
     console.error('   Depois execute:    bun run dev --room <ROOM_CODE>\n');
     printUsage();
     process.exit(1);
@@ -89,16 +89,20 @@ async function main(): Promise<void> {
 
   // Inicializa o bot Minecraft
   const botManager = new BotManager(botConfig);
-  const agent = new AgentLoop(botManager, llm);
+  const agent = new AgentLoop(botManager, llm, {
+    roomCode,
+    botUsername: botConfig.username,
+    modelSelector: model,
+  });
 
-  // Graceful shutdown
-  const shutdown = () => {
+  // Graceful shutdown — flush de métricas antes de sair
+  const shutdown = async () => {
     console.log('\n🛑 Encerrando...');
-    agent.stop();
+    await agent.shutdown();
     process.exit(0);
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => { shutdown(); });
+  process.on('SIGTERM', () => { shutdown(); });
 
   // Conecta e inicia
   botManager.createBot();

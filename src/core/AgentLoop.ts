@@ -1,8 +1,8 @@
 /**
  * AgentLoop.ts
  *
- * Orquestra o ciclo principal do agente: percepção → memória → raciocínio (LLM) → ação.
- * Responsável por integrar bot, LLM, executor, percepção e memória, garantindo decisões autônomas.
+ * Orquestra o ciclo principal do agente: percepção → memória → raciocínio (LLM) → ação → log.
+ * Responsável por integrar bot, LLM, executor, percepção, memória e data logger.
  *
  * Principais classes:
  *   - AgentLoop: ciclo de decisão, integração de módulos, controle de execução.
@@ -15,9 +15,10 @@
  */
 import type { BotAction, ChatMessage } from '../types/types';
 import { BotManager } from '../bot/BotManager';
-import { ActionExecutor } from '../bot/ActionExecutor';
+import { ActionExecutor, type ActionResult } from '../bot/ActionExecutor';
 import { PerceptionManager } from '../bot/PerceptionManager';
 import { MemoryManager } from './MemoryManager';
+import { DataLogger, type CycleData } from './DataLogger';
 import { GambiLLM } from '../llm/GambiarraLLM';
 import { botActionSchema } from '../schemas/botAction';
 import { botPromptTemplate } from '../prompts/botPrompts';
@@ -25,25 +26,45 @@ import { sleep } from '../utils/sleep';
 import { safeParseJSON } from '../utils/jsonParser';
 import { agentConfig } from '../config/settings';
 
-/**
- * Loop principal do agente: Percepção → Memória → Raciocínio → Ação.
- *
- * Agora usa GambiarraLLM para enviar requests ao hub Gambiarra,
- * que roteia para qualquer LLM disponível na sala.
- */
+/** Resultado intermediário do raciocínio pra passar pro logger */
+interface ThinkResult {
+  action: BotAction;
+  responseTimeMs: number;
+  rawLength: number;
+  jsonRepaired: boolean;
+  parseError: boolean;
+}
+
 export class AgentLoop {
   private botManager: BotManager;
   private llm: GambiLLM;
   private executor: ActionExecutor | null = null;
   private perception: PerceptionManager | null = null;
   private memory: MemoryManager;
+  private logger: DataLogger;
   private isRunning = false;
   private listenersAttached = false;
 
-  constructor(botManager: BotManager, llm: GambiLLM) {
+  // Identificadores pra correlacionar dados
+  private sessionId: string;
+  private botUsername: string;
+  private roomCode: string;
+  private modelSelector: string;
+
+  constructor(botManager: BotManager, llm: GambiLLM, options: {
+    roomCode: string;
+    botUsername: string;
+    modelSelector: string;
+  }) {
     this.botManager = botManager;
     this.llm = llm;
     this.memory = new MemoryManager();
+    this.logger = new DataLogger();
+
+    this.sessionId = crypto.randomUUID();
+    this.botUsername = options.botUsername;
+    this.roomCode = options.roomCode;
+    this.modelSelector = options.modelSelector;
 
     this.botManager.setCallbacks(
       () => this.onConnected(),
@@ -53,12 +74,19 @@ export class AgentLoop {
 
   start(): void {
     console.log('🧠 Agente ativado (via Gambiarra Hub)');
+    console.log(`📊 Session ID: ${this.sessionId}`);
     this.isRunning = true;
     this.loop();
   }
 
   stop(): void {
     this.isRunning = false;
+  }
+
+  /** Flush de métricas pendentes antes de sair. */
+  async shutdown(): Promise<void> {
+    this.stop();
+    await this.logger.shutdown();
   }
 
   private async loop(): Promise<void> {
@@ -71,10 +99,13 @@ export class AgentLoop {
       try {
         // 1. PERCEPÇÃO
         const contexto = this.perception.getContextString();
+        const gameCtx = this.perception.getGameContext();
 
         // 2. RACIOCÍNIO (LLM via Gambiarra)
-        const decisao = await this.pensar(contexto);
-        if (!decisao || !this.botManager.isConnected()) continue;
+        const thinkResult = await this.pensar(contexto);
+        if (!thinkResult || !this.botManager.isConnected()) continue;
+
+        const decisao = thinkResult.action;
 
         // Log do raciocínio
         if (decisao.raciocinio) {
@@ -95,6 +126,9 @@ export class AgentLoop {
           console.log(`⚠️  ${result.action} falhou: ${result.errorMessage}`);
         }
 
+        // 5. LOG DE MÉTRICAS (fire-and-forget)
+        this.logCycle(thinkResult, result, decisao, gameCtx);
+
         await sleep(agentConfig.loopIntervalMs);
       } catch (err) {
         console.error('❌ Erro no loop:', err);
@@ -103,7 +137,66 @@ export class AgentLoop {
     }
   }
 
-  private async pensar(contexto: string): Promise<BotAction | null> {
+  private logCycle(
+    think: ThinkResult,
+    result: ActionResult,
+    action: BotAction,
+    gameCtx: {
+      vida: number;
+      fome: number;
+      posicao: { x: number; y: number; z: number };
+      bioma: string;
+      clima: string;
+      horaDoDia: number;
+      estaAndando: boolean;
+      jogadoresProximos: string[];
+      entidadesProximas: unknown[];
+      blocosProximos: unknown[];
+      inventario: unknown[];
+    },
+  ): void {
+    const data: CycleData = {
+      // Sessão
+      session_id: this.sessionId,
+      bot_username: this.botUsername,
+      room_code: this.roomCode,
+      model_selector: this.modelSelector,
+
+      // LLM
+      llm_response_time_ms: think.responseTimeMs,
+      llm_raw_length: think.rawLength,
+      llm_json_repaired: think.jsonRepaired,
+      llm_parse_error: think.parseError,
+
+      // Decisão
+      action: result.action,
+      action_success: result.success,
+      action_execution_time_ms: result.executionTimeMs,
+      action_error: result.errorMessage ?? null,
+      reasoning: action.raciocinio ?? null,
+      direction: action.direcao ?? null,
+      target: action.alvo ?? null,
+
+      // Contexto do jogo
+      health: gameCtx.vida,
+      food: gameCtx.fome,
+      pos_x: gameCtx.posicao.x,
+      pos_y: gameCtx.posicao.y,
+      pos_z: gameCtx.posicao.z,
+      biome: gameCtx.bioma,
+      weather: gameCtx.clima,
+      time_of_day: gameCtx.horaDoDia,
+      is_moving: gameCtx.estaAndando,
+      nearby_players: gameCtx.jogadoresProximos.length,
+      nearby_entities: gameCtx.entidadesProximas.length,
+      nearby_blocks: gameCtx.blocosProximos.length,
+      inventory_items: gameCtx.inventario.length,
+    };
+
+    this.logger.log(data);
+  }
+
+  private async pensar(contexto: string): Promise<ThinkResult | null> {
     if (!this.botManager.isConnected()) return null;
 
     try {
@@ -127,19 +220,39 @@ export class AgentLoop {
         console.warn(`⚠️  JSON inválido da LLM: ${error}`);
         console.warn(`   Resposta bruta: ${response.content.slice(0, 200)}`);
         this.memory.recordEvent('LLM retornou JSON inválido — fallback');
-        return { raciocinio: 'Fallback: JSON inválido', acao: 'EXPLORAR' };
+        return {
+          action: { raciocinio: 'Fallback: JSON inválido', acao: 'EXPLORAR' },
+          responseTimeMs: response.responseTimeMs,
+          rawLength: response.content.length,
+          jsonRepaired: false,
+          parseError: true,
+        };
       }
 
       if (repaired) {
         console.log('🔧 JSON da LLM precisou de reparo (jsonrepair)');
       }
 
-      return botActionSchema.parse(data);
+      const parsed = botActionSchema.parse(data);
+
+      return {
+        action: parsed,
+        responseTimeMs: response.responseTimeMs,
+        rawLength: response.content.length,
+        jsonRepaired: repaired,
+        parseError: false,
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('❌ Erro no raciocínio:', msg);
       this.memory.recordEvent(`Erro no raciocínio: ${msg}`);
-      return { raciocinio: 'Fallback por erro', acao: 'EXPLORAR' };
+      return {
+        action: { raciocinio: 'Fallback por erro', acao: 'EXPLORAR' },
+        responseTimeMs: 0,
+        rawLength: 0,
+        jsonRepaired: false,
+        parseError: true,
+      };
     }
   }
 
