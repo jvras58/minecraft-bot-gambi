@@ -67,10 +67,10 @@ export class MemoryManager {
     const counts: Record<string, number> = {};
     for (const e of this.entries) {
       if (e.tipo !== 'acao') continue;
-      const match = e.resumo.match(/\[.\] (\w+)/);
-      if (match) {
-        counts[match[1]] = (counts[match[1]] || 0) + 1;
-      }
+        const match = e.resumo.match(/\[.\] (\w+)/);
+        if (match && typeof match[1] !== 'undefined') {
+          counts[match[1]] = (counts[match[1]] || 0) + 1;
+        }
     }
     return counts;
   }
