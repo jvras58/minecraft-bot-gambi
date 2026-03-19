@@ -1,9 +1,24 @@
+/**
+ * AgentLoop.ts
+ *
+ * Orquestra o ciclo principal do agente: percepção → memória → raciocínio (LLM) → ação.
+ * Responsável por integrar bot, LLM, executor, percepção e memória, garantindo decisões autônomas.
+ *
+ * Principais classes:
+ *   - AgentLoop: ciclo de decisão, integração de módulos, controle de execução.
+ *
+ * Extensão:
+ *   - Customizar ciclo, adicionar hooks, novos passos ou lógica de decisão.
+ *
+ * Uso:
+ *   Utilizado como loop central do bot, chamado pelo index.ts.
+ */
 import type { BotAction, ChatMessage } from '../types/types';
 import { BotManager } from '../bot/BotManager';
 import { ActionExecutor } from '../bot/ActionExecutor';
 import { PerceptionManager } from '../bot/PerceptionManager';
 import { MemoryManager } from './MemoryManager';
-import { GambiarraLLM } from '../llm/GambiarraLLM';
+import { GambiLLM } from '../llm/GambiarraLLM';
 import { botActionSchema } from '../schemas/botAction';
 import { botPromptTemplate } from '../prompts/botPrompts';
 import { sleep } from '../utils/sleep';
@@ -18,14 +33,14 @@ import { agentConfig } from '../config/settings';
  */
 export class AgentLoop {
   private botManager: BotManager;
-  private llm: GambiarraLLM;
+  private llm: GambiLLM;
   private executor: ActionExecutor | null = null;
   private perception: PerceptionManager | null = null;
   private memory: MemoryManager;
   private isRunning = false;
   private listenersAttached = false;
 
-  constructor(botManager: BotManager, llm: GambiarraLLM) {
+  constructor(botManager: BotManager, llm: GambiLLM) {
     this.botManager = botManager;
     this.llm = llm;
     this.memory = new MemoryManager();

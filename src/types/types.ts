@@ -1,3 +1,24 @@
+/**
+ * types.ts
+ *
+ * Define tipos globais do projeto para configuração, contexto do jogo, memória, entidades, inventário e LLM.
+ * Centraliza contratos de dados usados por todos os módulos do bot.
+ *
+ * Principais tipos:
+ *   - BotConfig: configurações do bot Minecraft.
+ *   - BotAction: ações válidas (importadas do schema).
+ *   - GameContext: estado do jogo percebido pelo bot.
+ *   - EntityInfo, BlockInfo, InventoryItem: detalhes de entidades, blocos e inventário.
+ *   - MemoryEntry: eventos e ações registrados na memória.
+ *   - ChatMessage: estrutura de mensagens para LLM.
+ *
+ * Extensão:
+ *   - Adicione novos tipos conforme expansão do bot.
+ *
+ * Uso:
+ *   Referenciado por quase todos os módulos para garantir tipagem consistente.
+ */
+
 // ─── Bot Config ───────────────────────────────────────────────
 export interface BotConfig {
   host: string;

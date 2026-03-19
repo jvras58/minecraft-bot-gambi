@@ -1,3 +1,19 @@
+/**
+ * index.ts
+ *
+ * Ponto de entrada do bot Minecraft com IA.
+ * Processa argumentos CLI, inicializa configurações e instancia bot, loop e LLM.
+ *
+ * Principais funções:
+ *   - main: processa argumentos, valida sala, inicializa configs.
+ *   - printUsage: exibe instruções de uso.
+ *
+ * Extensão:
+ *   - Personalização via argumentos CLI e variáveis de ambiente.
+ *
+ * Uso:
+ *   Executado diretamente para iniciar o bot.
+ */
 import { botConfig, gambiarraConfig } from './config/settings';
 import { BotManager } from './bot/BotManager';
 import { AgentLoop } from './core/AgentLoop';

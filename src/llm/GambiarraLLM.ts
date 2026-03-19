@@ -1,3 +1,18 @@
+/**
+ * GambiarraLLM.ts
+ *
+ * Cliente para Gambi Hub, roteia requests para LLMs disponíveis na sala.
+ * Permite selecionar modelo, enviar mensagens e obter respostas de IA.
+ *
+ * Principais classes:
+ *   - GambiLLM: integra SDK Gambi, resolve modelo, envia prompts e retorna respostas.
+ *
+ * Extensão:
+ *   - Adicionar suporte a novos protocolos ou modelos de IA.
+ *
+ * Uso:
+ *   Utilizado por AgentLoop para raciocínio/autonomia do bot.
+ */
 import { createGambi, type GambiProvider } from 'gambi-sdk';
 import { generateText } from 'ai';
 import type { ChatMessage, LLMResponse } from '../types/types';

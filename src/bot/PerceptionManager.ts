@@ -1,3 +1,18 @@
+/**
+ * PerceptionManager.ts
+ *
+ * Extrai contexto do jogo Minecraft para o bot (vida, fome, posição, inventário, entidades próximas).
+ * Gera contexto textual e estruturado para IA, permitindo decisões baseadas no ambiente.
+ *
+ * Principais classes:
+ *   - PerceptionManager: métodos para percepção do mundo, inventário, entidades e blocos.
+ *
+ * Extensão:
+ *   - Expandir percepção (novos sensores, mais detalhes do mundo).
+ *
+ * Uso:
+ *   Utilizado por AgentLoop para fornecer contexto ao LLM.
+ */
 import type { Bot } from 'mineflayer';
 import type {
   GameContext,

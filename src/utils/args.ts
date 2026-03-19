@@ -1,3 +1,21 @@
+/**
+ * args.ts
+ *
+ * Responsável por parsear argumentos da linha de comando para o bot Minecraft.
+ * Permite configurar sala, hub, modelo de IA e exibir ajuda.
+ *
+ * Principais funções:
+ *   - parseArgs: converte argv em objeto BotArgs.
+ *
+ * Principais tipos:
+ *   - BotArgs: interface para argumentos suportados.
+ *
+ * Extensão:
+ *   - Adicione novos argumentos no switch-case de parseArgs.
+ *
+ * Uso:
+ *   Utilizado em index.ts para inicializar o bot com parâmetros customizados.
+ */
 export interface BotArgs {
   room: string | null;
   hub: string | null;

@@ -1,3 +1,20 @@
+/**
+ * settings.ts
+ *
+ * Define configurações globais do bot, Gambiarra Hub e agente.
+ * Centraliza parâmetros de conexão, intervalos, limites e raios de percepção.
+ *
+ * Principais objetos:
+ *   - botConfig: configurações do bot Minecraft.
+ *   - gambiarraConfig: parâmetros do hub e modelo de IA.
+ *   - agentConfig: intervalos, memória, raios de percepção.
+ *
+ * Extensão:
+ *   - Adicionar novos parâmetros ou ajustar valores default.
+ *
+ * Uso:
+ *   Utilizado por todos os módulos para parametrização e controle de comportamento.
+ */
 import type { BotConfig } from '../types/types';
 
 export const botConfig: BotConfig = {

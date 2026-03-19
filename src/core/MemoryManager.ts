@@ -1,11 +1,21 @@
+/**
+ * MemoryManager.ts
+ *
+ * Gerencia memória de curto prazo do bot (eventos, ações, interações).
+ * Implementa ring buffer em memória, sem persistência.
+ *
+ * Principais classes:
+ *   - MemoryManager: métodos para registrar eventos, ações, observações e gerar prompt.
+ *
+ * Extensão:
+ *   - Expandir tipos de memória, persistência, integração com memória longa.
+ *
+ * Uso:
+ *   Utilizado por AgentLoop para fornecer contexto recente ao LLM.
+ */
 import type { MemoryEntry } from '../types/types';
 import { agentConfig } from '../config/settings';
 
-/**
- * Memória de curto prazo do bot.
- *
- * Ring buffer em memória — zero I/O, zero overhead.
- */
 export class MemoryManager {
   private entries: MemoryEntry[] = [];
   private maxSize: number;

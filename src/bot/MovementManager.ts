@@ -1,3 +1,18 @@
+/**
+ * MovementManager.ts
+ *
+ * Controla movimentação do bot Minecraft (andar, explorar, seguir, fugir).
+ * Responsável por traduzir comandos de movimento em ações mineflayer.
+ *
+ * Principais classes:
+ *   - MovementManager: métodos para movimentação, controle de direção, interação com entidades.
+ *
+ * Extensão:
+ *   - Adicionar novas estratégias de movimento ou lógica de pathfinding.
+ *
+ * Uso:
+ *   Utilizado por ActionExecutor e BotManager para movimentação do bot.
+ */
 import type { Bot, ControlState } from 'mineflayer';
 
 export class MovementManager {

@@ -1,3 +1,18 @@
+/**
+ * botPrompts.ts
+ *
+ * Define templates de prompt para IA, incluindo instruções de sistema e formato de resposta.
+ * Orienta o comportamento do bot, regras, prioridades e formato de ações.
+ *
+ * Principais objetos:
+ *   - botPromptTemplate: template de prompt para LLM.
+ *
+ * Extensão:
+ *   - Customizar comportamento, adicionar novas ações ou regras.
+ *
+ * Uso:
+ *   Utilizado por AgentLoop para gerar prompts para GambiarraLLM.
+ */
 import type { PromptTemplate } from '../types/types';
 
 export const botPromptTemplate: PromptTemplate = {

@@ -1,3 +1,18 @@
+/**
+ * ActionExecutor.ts
+ *
+ * Executa ações do bot Minecraft baseadas em decisões da IA.
+ * Responsável por traduzir decisões em comandos mineflayer (andar, falar, explorar, pular, parar, etc).
+ *
+ * Principais classes:
+ *   - ActionExecutor: recebe decisões (BotAction), executa comandos no bot.
+ *
+ * Extensão:
+ *   - Adicionar novos tipos de ações ou customizar lógica de execução.
+ *
+ * Uso:
+ *   Utilizado por AgentLoop para executar ações validadas pelo schema.
+ */
 import type { Bot } from 'mineflayer';
 import type { BotAction } from '../types/types';
 import { MovementManager } from './MovementManager';
