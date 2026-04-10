@@ -1,196 +1,277 @@
-# Arquitetura — Minecraft Bot com IA via Gambi
+# Arquitetura — Minecraft Bot Benchmark Fan-out via Gambi
 
 ## Visão Geral
 
-O projeto é um **bot autônomo de Minecraft** que usa Large Language Models (LLMs) para tomar decisões em tempo real. Em vez de chamar uma API cloud (OpenAI, Anthropic), o bot se conecta ao **Gambi** — um sistema distribuído de compartilhamento de LLMs em rede local — para usar modelos rodando nas máquinas dos próprios participantes.
+O projeto é um **bot autônomo de Minecraft** que usa LLMs para tomar decisões em tempo real, operando em **modo fan-out benchmark**: a cada ciclo, o bot envia o **mesmo prompt para TODOS os participantes** de uma sala Gambi em paralelo, coleta todas as respostas, executa uma delas e loga tudo no Supabase.
 
-Cada pessoa baixa o projeto, roda o bot localmente, e todos jogam juntos no mesmo servidor Minecraft. Os LLMs são compartilhados via uma sala do Gambi: quem tem GPU contribui com modelos, quem não tem usa os modelos dos outros.
+O objetivo é produzir dados pareados para comparação direta de modelos e hardware — mesmo prompt, mesmo instante, mesmo contexto de jogo, respostas diferentes.
+
+O bot se conecta ao **Gambi** — um hub open-source que interliga LLMs em rede local — para acessar modelos rodando nas máquinas dos participantes. O Gambi é um proxy transparente: não gera prompts, não faz inferência, apenas redireciona requisições.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     VISÃO GERAL DO SISTEMA                      │
-│                                                                 │
-│  Jogador A (RTX 4090)          Jogador B (MacBook, sem GPU)    │
-│  ┌──────────┐ ┌──────────┐    ┌──────────┐                    │
-│  │ Ollama   │ │ Bot MC   │    │ Bot MC   │                    │
-│  │ llama3   │ │ (este    │    │ (este    │                    │
-│  │          │ │  projeto)│    │  projeto)│                    │
-│  └────┬─────┘ └────┬─────┘    └────┬─────┘                    │
-│       │ LLM        │ SDK          │ SDK                       │
-│       │ endpoint   │              │                            │
-│       ▼            ▼              ▼                            │
-│  ┌──────────────────────────────────────────┐                  │
-│  │            GAMBI HUB (HTTP)              │                  │
-│  │                                          │                  │
-│  │  Sala: XK7P2M                           │                  │
-│  │  ┌────────────────────────────────────┐ │                  │
-│  │  │ jogador-a → llama3 @ :11434       │ │                  │
-│  │  │ jogador-c → mistral @ :1234       │ │                  │
-│  │  └────────────────────────────────────┘ │                  │
-│  └──────────────────────────────────────────┘                  │
-│       ▲                                                        │
-│       │ LLM endpoint                                           │
-│  ┌────┴─────┐ ┌──────────┐                                    │
-│  │ LM Studio│ │ Bot MC   │    Jogador C (Linux + GTX 1080)    │
-│  │ mistral  │ │          │                                     │
-│  └──────────┘ └──────────┘                                     │
-│                                                                 │
-│  ┌──────────────────────────────────────────┐                  │
-│  │         SUPABASE (Postgres)              │                  │
-│  │  Coleta automática de métricas           │                  │
-│  │  de todos os bots via REST               │                  │
-│  └──────────────────────────────────────────┘                  │
-│                                                                 │
-│  ┌──────────┐                                                  │
-│  │ Servidor │    Paper MC (Java Edition)                       │
-│  │Minecraft │    Todos os bots conectam aqui                   │
-│  └──────────┘                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                        VISÃO GERAL DO SISTEMA                       │
+│                                                                      │
+│                     ┌──────────────────────┐                         │
+│                     │    Minecraft Bot     │                         │
+│                     │    (este projeto)    │                         │
+│                     │                      │                         │
+│                     │  Prompt montado      │                         │
+│                     │  LOCALMENTE          │                         │
+│                     │  (botPrompts.ts)     │                         │
+│                     └──────────┬───────────┘                         │
+│                                │                                     │
+│              ┌─────────────────┼─────────────────┐                   │
+│              │   MESMO PROMPT  │  PARA TODOS     │                   │
+│              ▼                 ▼                  ▼                   │
+│  ┌───────────────────────────────────────────────────────┐           │
+│  │                  GAMBI HUB (HTTP)                     │           │
+│  │                                                       │           │
+│  │  Sala: ABC123                                         │           │
+│  │  ┌─────────────────────────────────────────────────┐  │           │
+│  │  │ joao  → llama3  @ 192.168.1.50:11434 (RTX 4090)│  │           │
+│  │  │ maria → mistral @ 192.168.1.51:1234  (GTX 1080)│  │           │
+│  │  │ pedro → qwen2   @ 192.168.1.52:11434 (M2 Pro)  │  │           │
+│  │  └─────────────────────────────────────────────────┘  │           │
+│  └───────────────────────────────────────────────────────┘           │
+│              │                 │                  │                   │
+│              ▼                 ▼                  ▼                   │
+│       ┌──────────┐     ┌──────────┐       ┌──────────┐              │
+│       │  Ollama  │     │ LM Studio│       │  Ollama  │              │
+│       │  llama3  │     │  mistral │       │  qwen2   │              │
+│       │ RTX 4090 │     │ GTX 1080 │       │  M2 Pro  │              │
+│       └──────────┘     └──────────┘       └──────────┘              │
+│                                                                      │
+│              TODAS as respostas voltam para o bot                    │
+│                         │                                            │
+│                         ▼                                            │
+│              ┌──────────────────────┐                                │
+│              │      Supabase        │                                │
+│              │  sessions            │                                │
+│              │  participant_snapshots│                                │
+│              │  cycle_responses     │                                │
+│              └──────────────────────┘                                │
+│                                                                      │
+│              ┌──────────────────────┐                                │
+│              │  Servidor Minecraft  │                                │
+│              │  Paper MC (Java Ed.) │                                │
+│              └──────────────────────┘                                │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Componentes
 
 ### 1. Bot Minecraft (este repositório)
 
-O bot é uma aplicação TypeScript/Bun que cada jogador executa localmente. Ele se conecta a dois serviços:
+Aplicação TypeScript/Bun que se conecta a:
 
-- **Servidor Minecraft** via Mineflayer (protocolo nativo do Minecraft)
+- **Servidor Minecraft** via Mineflayer (protocolo nativo)
 - **Gambi Hub** via SDK (HTTP REST, API compatível com OpenAI)
 
-O bot **não** roda nenhum LLM. Ele apenas envia prompts e recebe respostas. A inferência acontece na máquina de quem compartilhou o modelo.
+O bot **não** roda nenhum LLM. Os prompts são definidos localmente em `botPrompts.ts` e enviados a cada ciclo via SDK. A inferência acontece nas máquinas dos participantes.
 
 ### 2. Gambi Hub
 
-Servidor HTTP central que gerencia salas e roteia requisições LLM. Cada sala tem um código de 6 caracteres (ex: `XK7P2M`). Participantes registram seus endpoints LLM na sala, e qualquer cliente conectado à sala pode usar qualquer LLM disponível.
+Servidor HTTP central que gerencia salas e redireciona requisições LLM. O hub **não** processa inferência e **não** gera prompts — é um proxy transparente que:
 
-O hub **não** processa inferência. Ele é um proxy inteligente que:
-
-- Recebe o request do bot (via SDK)
-- Resolve para qual participante enviar (por modelo, ID, ou aleatório)
-- Faz forward do request para o endpoint do participante
-- Retorna a resposta para o bot
+- Mantém registro de quais máquinas estão online e quais modelos oferecem
+- Quando o bot faz uma requisição via `gambi.participant(id)`, redireciona para o endpoint daquela máquina
+- Retorna a resposta sem modificar o conteúdo
 
 ### 3. Gambi SDK
 
-Provider do Vercel AI SDK que abstrai a comunicação com o hub. O bot usa o SDK assim:
+Provider do Vercel AI SDK. O bot usa dois métodos principais:
 
 ```typescript
-import { createGambi } from 'gambi-sdk';
-import { generateText } from 'ai';
+// Listar participantes com specs de hardware
+const participants = await gambi.listParticipants();
+// → [{ id, nickname, model, status, specs: { cpu, ram, gpu, vram, os } }]
 
-const gambi = createGambi({
-  roomCode: 'XK7P2M',
-  hubUrl: 'http://192.168.1.100:3000',
-  defaultProtocol: 'chatCompletions',
-});
-
+// Enviar prompt para um participante específico
 const result = await generateText({
-  model: gambi.any(),     // qualquer LLM disponível na sala
-  prompt: "Decida a próxima ação",
+  model: gambi.participant("joao"),
+  system: systemPrompt,
+  messages: [...],
 });
 ```
 
-### 4. Supabase (Coleta de Métricas)
+### 4. Supabase (Coleta de Dados)
 
-Banco Postgres online que recebe métricas de todos os bots automaticamente via REST API. Cada ciclo de decisão do bot gera um registro com dados do LLM, da ação e do contexto do jogo.
+Banco Postgres online com 3 tabelas:
 
-Configuração opcional — se o jogador não configurar as variáveis `SUPABASE_URL` e `SUPABASE_ANON_KEY`, o bot funciona normalmente sem coletar dados.
+| Tabela | Descrição | Quando insere |
+|--------|-----------|---------------|
+| `sessions` | Metadados da sessão (room, bot, duração) | Uma vez no início |
+| `participant_snapshots` | Specs de cada máquina (CPU, RAM, GPU, VRAM, OS) | Uma vez no início |
+| `cycle_responses` | Uma linha por participante por ciclo | A cada ciclo (~3s) |
+
+Configuração opcional — sem as variáveis `SUPABASE_URL` e `SUPABASE_ANON_KEY`, o bot funciona normalmente sem coletar dados.
 
 ---
 
-## Ciclo de Decisão (AgentLoop)
-
-O bot opera em um loop contínuo a cada 3 segundos:
+## Ciclo de Decisão (AgentLoop — modo fan-out)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    AGENTLOOP (3s cycle)                     │
-│                                                             │
-│  ┌─────────────┐                                            │
-│  │ 1. PERCEPÇÃO│  PerceptionManager.getGameContext()        │
-│  │             │  → vida, fome, posição, entidades,         │
-│  │             │    blocos, inventário, bioma, clima        │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 2. MEMÓRIA  │  MemoryManager.toPromptString()            │
-│  │             │  → últimos 15 eventos (ring buffer)        │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 3. PROMPT   │  botPromptTemplate.system + human          │
-│  │             │  → contexto + memória + contagem ações     │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 4. LLM      │  GambiLLM.invoke(messages)                 │
-│  │             │  → SDK → Hub → Participante → resposta     │
-│  │             │  ← JSON: { acao, raciocinio, alvo, ... }   │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 5. PARSE    │  safeParseJSON() + botActionSchema.parse   │
-│  │             │  → validação Zod, reparo com jsonrepair    │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 6. AÇÃO     │  ActionExecutor.executar(decisao)          │
-│  │             │  → mineflayer: andar, falar, coletar...    │
-│  └──────┬──────┘                                            │
-│         ▼                                                   │
-│  ┌─────────────┐                                            │
-│  │ 7. LOG      │  DataLogger.log(cycleData)                 │
-│  │             │  → fire-and-forget POST para Supabase      │
-│  └─────────────┘                                            │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    AGENTLOOP — FAN-OUT (3s cycle)                │
+│                                                                  │
+│  ┌──────────────┐                                                │
+│  │ 1. PERCEPÇÃO │  PerceptionManager.getGameContext()            │
+│  │              │  → vida, fome, posição, entidades,             │
+│  │              │    blocos, inventário, bioma, clima            │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 2. MEMÓRIA   │  MemoryManager.toPromptString()                │
+│  │              │  → últimos 15 eventos (ring buffer)            │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 3. PROMPT    │  Montado UMA vez (system + contexto + memória) │
+│  │              │  Prompts definidos em botPrompts.ts (local)    │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐  ┌─────────────────────────────────────────┐   │
+│  │ 4. FAN-OUT   │  │ Promise.all([                           │   │
+│  │              │  │   generateText({ model: participant A })│   │
+│  │  MESMO       │  │   generateText({ model: participant B })│   │
+│  │  PROMPT      │  │   generateText({ model: participant C })│   │
+│  │  PARA TODOS  │  │ ])                                      │   │
+│  │              │  │ → N respostas em paralelo               │   │
+│  └──────┬───────┘  └─────────────────────────────────────────┘   │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 5. PARSE     │  Para CADA resposta:                           │
+│  │              │  safeParseJSON() + botActionSchema.parse()     │
+│  │              │  → N ações validadas (ou erros)                │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 6. SELEÇÃO   │  Escolhe a resposta válida mais rápida        │
+│  │              │  (estratégia configurável: fastest | random)   │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 7. EXECUÇÃO  │  ActionExecutor.executar(ação selecionada)     │
+│  │              │  → mineflayer: andar, falar, coletar...        │
+│  └──────┬───────┘                                                │
+│         ▼                                                        │
+│  ┌──────────────┐                                                │
+│  │ 8. LOG       │  DataLogger.log(TODAS as respostas)            │
+│  │              │  → N linhas no Supabase (1 por participante)  │
+│  │              │  → was_executed = true só na selecionada       │
+│  └──────────────┘                                                │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Fluxo de Comunicação Detalhado
+### Diferença para o modo anterior
 
-### Request LLM (Bot → Gambi → Participante)
+| Aspecto | Antes (sessões separadas) | Agora (fan-out) |
+|---------|---------------------------|-----------------|
+| Prompt | Enviado para 1 participante | Enviado para TODOS em paralelo |
+| Comparação | Entre sessões diferentes | Dentro do mesmo ciclo |
+| Contexto do jogo | Diferente por sessão | Idêntico para todos |
+| Dados por ciclo | 1 linha no banco | N linhas (1 por participante) |
+| Análise estatística | Amostras independentes | Dados pareados |
+| Specs da máquina | Registradas manualmente | Capturadas automaticamente |
+
+---
+
+## Fluxo de Comunicação — Fan-out
 
 ```
-Bot (Jogador B)                Gambi Hub                 Ollama (Jogador A)
-     │                            │                           │
-     │  POST /rooms/XK7P2M/v1/    │                           │
-     │  chat/completions          │                           │
-     │  { model: "*",             │                           │
-     │    messages: [...] }       │                           │
-     │ ──────────────────────────►│                           │
-     │                            │  (resolve: model "*"      │
-     │                            │   → jogador-a, online)    │
-     │                            │                           │
-     │                            │  POST /v1/chat/completions│
-     │                            │  { model: "llama3",       │
-     │                            │    messages: [...] }      │
-     │                            │ ─────────────────────────►│
-     │                            │                           │
-     │                            │  200 OK                   │
-     │                            │  { choices: [...] }       │
-     │                            │ ◄─────────────────────────│
-     │                            │                           │
-     │  200 OK                    │                           │
-     │  { choices: [...] }        │                           │
-     │ ◄──────────────────────────│                           │
-     │                            │                           │
+Bot                      Gambi Hub              Máquina A        Máquina B        Máquina C
+ │                          │                      │                │                │
+ │  listParticipants()      │                      │                │                │
+ │ ────────────────────────►│                      │                │                │
+ │  ◄── [{joao, maria, pedro}]                    │                │                │
+ │                          │                      │                │                │
+ │  POST participant:joao   │                      │                │                │
+ │ ────────────────────────►│  forward ───────────►│                │                │
+ │                          │                      │                │                │
+ │  POST participant:maria  │                      │                │                │
+ │ ────────────────────────►│  forward ────────────────────────────►│                │
+ │                          │                      │                │                │
+ │  POST participant:pedro  │                      │                │                │
+ │ ────────────────────────►│  forward ───────────────────────────────────────────►  │
+ │                          │                      │                │                │
+ │                          │  ◄── resposta A (842ms)               │                │
+ │  ◄── resposta A ─────────│                      │                │                │
+ │                          │                      │  ◄── resposta B (1203ms)        │
+ │  ◄── resposta B ─────────│                      │                │                │
+ │                          │                      │                │  ◄── resp C (956ms)
+ │  ◄── resposta C ─────────│                      │                │                │
+ │                          │                      │                │                │
+ │  Seleciona A (mais rápida)                      │                │                │
+ │  Executa ação de A no Minecraft                 │                │                │
+ │  Loga A, B, C no Supabase                      │                │                │
 ```
 
-### Roteamento de Modelos
+As 3 requisições são disparadas em paralelo via `Promise.all`. O hub recebe cada uma independentemente e redireciona para o endpoint da máquina correspondente.
 
-O campo `model` no request controla qual participante atende:
+---
 
-| Valor no `--model` | Método SDK | Comportamento |
-|---------------------|------------|---------------|
-| `*` (default) | `gambi.any()` | Participante online aleatório |
-| `llama3` | `gambi.model("llama3")` | Primeiro participante com esse modelo |
-| `participant:joao-4090` | `gambi.participant("joao-4090")` | Participante específico pelo ID |
+## Pipeline de Coleta de Dados
 
-Isso permite:
+### Início da sessão
 
-- **Uso casual**: `*` — qualquer LLM serve, máxima disponibilidade
-- **Experimento controlado**: `llama3` — forçar um modelo específico
-- **Benchmark de hardware**: `participant:X` — forçar uma máquina específica
+```
+AgentLoop.start()
+     │
+     ├── llm.getOnlineParticipants()    → lista com specs de hardware
+     │
+     ├── logger.logSession({...})       → INSERT em sessions
+     │
+     └── logger.logParticipantSnapshots({...})  → INSERT em participant_snapshots
+              │
+              └── specs capturadas automaticamente pelo gambi join:
+                  { cpu: "AMD Ryzen 7 5800X", ram: "32GB",
+                    gpu: "NVIDIA RTX 4090", vram: "24GB", os: "Ubuntu 24.04" }
+```
+
+### A cada ciclo
+
+```
+AgentLoop (cada ciclo)
+     │
+     ├── Fan-out → N respostas
+     │
+     ├── Seleciona + executa 1
+     │
+     ├── DataLogger.log([               ← N linhas, uma por participante
+     │     { participant: "joao",  was_executed: true,  llm_response_time_ms: 842 },
+     │     { participant: "maria", was_executed: false, llm_response_time_ms: 1203 },
+     │     { participant: "pedro", was_executed: false, llm_response_time_ms: 956 },
+     │   ])
+     │        │
+     │        ├── Acumula em buffer (até 20 registros)
+     │        └── Quando cheio → batch POST para Supabase (fire-and-forget)
+     │
+     └── sleep(3000)
+```
+
+### O que é coletado por resposta
+
+| Categoria | Campos | Origem |
+|-----------|--------|--------|
+| Sessão | `session_id`, `cycle_number`, `room_code` | AgentLoop |
+| Participante | `participant_id`, `participant_nickname`, `model_name` | SDK |
+| LLM | `llm_response_time_ms`, `llm_raw_length`, `llm_json_repaired`, `llm_parse_error`, `llm_error` | GambiLLM + jsonParser |
+| Ação parseada | `action`, `reasoning`, `direction`, `target`, `content`, `raw_response` | Parse da resposta |
+| Execução | `was_executed`, `action_success`, `action_execution_time_ms`, `action_error` | ActionExecutor (só na selecionada) |
+| Jogo | `health`, `food`, `pos_x/y/z`, `biome`, `weather`, `nearby_*`, `inventory_items` | PerceptionManager |
+
+### Specs capturadas por snapshot
+
+| Campo | Exemplo | Origem |
+|-------|---------|--------|
+| `cpu` | "AMD Ryzen 7 5800X" | `gambi join` (automático) |
+| `ram` | "32GB" | `gambi join` (automático) |
+| `gpu` | "NVIDIA RTX 4090" | `gambi join` (automático) |
+| `vram` | "24GB" | `gambi join` (automático) |
+| `os` | "Ubuntu 24.04" | `gambi join` (automático) |
+| `specs_raw` | JSON completo | Backup com todos os campos |
 
 ---
 
@@ -201,151 +282,74 @@ minecraft-bot/
 ├── src/
 │   ├── index.ts                  # Bootstrap, CLI args, graceful shutdown
 │   ├── config/
-│   │   └── settings.ts           # Configurações (Gambi + Minecraft + Agent)
+│   │   └── settings.ts           # Configurações (Gambi + Minecraft + Benchmark)
 │   ├── bot/                      # Camada Minecraft (Mineflayer)
 │   │   ├── ActionExecutor.ts     # Traduz decisões em comandos do jogo
 │   │   ├── BotManager.ts         # Conexão, eventos, reconexão automática
 │   │   ├── MovementManager.ts    # Andar, explorar, seguir, fugir
-│   │   └── PerceptionManager.ts  # Extrai contexto do mundo (vida, entidades, blocos)
+│   │   └── PerceptionManager.ts  # Extrai contexto do mundo
 │   ├── core/                     # Lógica central
-│   │   ├── AgentLoop.ts          # Loop percepção → raciocínio → ação → log
+│   │   ├── AgentLoop.ts          # Loop fan-out: prompt → todos → seleciona → executa → log
 │   │   ├── MemoryManager.ts      # Ring buffer de 15 eventos recentes
-│   │   └── DataLogger.ts         # Envia métricas para Supabase (fire-and-forget)
+│   │   └── DataLogger.ts         # 3 tabelas Supabase (sessions, snapshots, responses)
 │   ├── llm/
-│   │   └── GambiarraLLM.ts       # Cliente LLM via Gambi SDK + Vercel AI SDK
+│   │   └── GambiarraLLM.ts       # invokeAll() fan-out + getOnlineParticipants()
 │   ├── prompts/
 │   │   └── botPrompts.ts         # System prompt + template do user message
 │   ├── schemas/
 │   │   └── botAction.ts          # Schema Zod das ações válidas
 │   ├── types/
-│   │   └── types.ts              # Interfaces TypeScript
+│   │   ├── types.ts              # Interfaces TypeScript (inclui FanOutResult)
+│   │   └── gambi-sdk.d.ts        # Tipos do SDK Gambi (ParticipantInfo, specs)
 │   └── utils/
-│       ├── args.ts               # Parser de argumentos CLI
+│       ├── args.ts               # Parser CLI (--room, --hub)
 │       ├── jsonParser.ts         # Parse + reparo de JSON (jsonrepair)
 │       └── sleep.ts              # Delay assíncrono
 ├── supabase/
-│   └── schema.sql                # DDL da tabela de métricas
-├── .env.example                  # Variáveis de ambiente (Minecraft + Gambi + Supabase)
+│   └── schema.sql                # DDL: 3 tabelas + índices + RLS + views
+├── .env.example
 └── package.json
-```
-
----
-
-## Pipeline de Coleta de Dados
-
-### O que é coletado
-
-A cada ciclo (~3s), o DataLogger registra:
-
-| Categoria | Campos | Origem |
-|-----------|--------|--------|
-| Sessão | `session_id`, `bot_username`, `room_code`, `model_selector` | Configuração do bot |
-| LLM | `llm_response_time_ms`, `llm_raw_length`, `llm_json_repaired`, `llm_parse_error` | GambiLLM + jsonParser |
-| Decisão | `action`, `action_success`, `action_execution_time_ms`, `reasoning`, `direction`, `target` | ActionExecutor + LLM response |
-| Jogo | `health`, `food`, `pos_x/y/z`, `biome`, `weather`, `nearby_players/entities/blocks`, `inventory_items` | PerceptionManager |
-
-### Como funciona
-
-```
-AgentLoop (cada ciclo)
-     │
-     ├── Executa ação
-     │
-     ├── DataLogger.log(cycleData)     ← NÃO bloqueia (sem await)
-     │        │
-     │        ├── Acumula em buffer (até 10 registros)
-     │        │
-     │        └── Quando buffer cheio:
-     │             POST /rest/v1/bot_cycles   → Supabase
-     │             (batch insert, fire-and-forget)
-     │
-     └── sleep(3000)
-```
-
-**Impacto no jogador: zero.** O `fetch` é assíncrono e não usa `await` no loop principal. Se o Supabase estiver fora do ar, os registros voltam pro buffer e tentam de novo no próximo flush. Se o buffer passar de 200, descarta os mais antigos.
-
-### Configuração
-
-Quem quer participar da coleta:
-
-```env
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-```
-
-Quem não quer: não configura nada. O DataLogger detecta que as variáveis não existem e fica inerte.
-
----
-
-## Integração com Gambi SDK — Detalhes
-
-### GambiLLM.ts
-
-A classe `GambiLLM` é o wrapper que conecta o bot ao Gambi:
-
-```typescript
-// Inicialização
-const provider = createGambi({
-  roomCode: 'XK7P2M',
-  hubUrl: 'http://localhost:3000',
-  defaultProtocol: 'chatCompletions',  // usa chat/completions (não Responses API)
-});
-
-// Resolução do modelo
-if (modelSelector === '*')           → provider.any()
-if (modelSelector === 'participant:X') → provider.participant('X')
-else                                    → provider.model(modelSelector)
-
-// Invocação
-const result = await generateText({
-  model: this.getModel(),
-  system: systemPrompt,
-  messages: [...],
-  temperature: 0.8,
-});
-```
-
-O SDK do Gambi cria internamente um provider `@ai-sdk/openai-compatible` apontando para:
-
-```
-http://<hub>:<port>/rooms/<ROOM_CODE>/v1
-```
-
-Isso significa que o hub funciona como uma "OpenAI local" — qualquer ferramenta que aceite base URL customizada funciona.
-
-### Health Check
-
-Antes de iniciar o loop, o bot verifica se o hub está acessível e se a sala tem participantes:
-
-```typescript
-const models = await provider.listModels();
-// GET /rooms/XK7P2M/v1/models
-// → retorna lista de participantes online com seus modelos
 ```
 
 ---
 
 ## Decisões de Design
 
-### Por que Gambi SDK e não chamada HTTP direta?
+### Por que fan-out no bot e não no hub?
 
-O SDK do Gambi é um provider do Vercel AI SDK. Isso dá de graça: streaming, retry, tipagem, e compatibilidade com qualquer modelo que o participante exponha. Trocar de "Ollama local" para "Gambi distribuído" foi literalmente trocar `createOllama()` por `createGambi()`.
+O hub do Gambi é um proxy transparente — não alteramos ele. O fan-out é feito no bot: ele lista os participantes, dispara N requests em paralelo (um por participante via `gambi.participant(id)`), e coleta todas as respostas. Do ponto de vista do hub, são N requests independentes — ele não sabe que vieram do mesmo ciclo.
 
-### Por que Chat Completions e não Responses API?
+### Por que capturar specs via listParticipants()?
 
-O bot usa `defaultProtocol: 'chatCompletions'` porque a maioria dos provedores locais (Ollama, LM Studio) suporta chat/completions nativamente. A Responses API é mais nova e nem todos os endpoints a implementam. O hub do Gambi faz fallback automático se necessário.
+O `gambi join` detecta e registra automaticamente as specs da máquina (CPU, RAM, GPU, VRAM, OS). O SDK expõe essas informações via `listParticipants()`. Capturamos uma vez no início da sessão e salvamos em `participant_snapshots`, assim a análise pode correlacionar latência com hardware sem registro manual.
 
-### Por que Supabase e não Redis/arquivo local?
+### Por que selecionar a mais rápida?
 
-- **Centralizado**: todos os bots escrevem no mesmo lugar, sem precisar coletar arquivos depois
-- **Zero dependência**: é um `fetch` POST, não precisa instalar driver
-- **Grátis**: o free tier do Supabase suporta 500MB e 50k rows/mês — mais que suficiente
-- **SQL**: consultas analíticas diretas (`GROUP BY model, hardware`)
-- **REST**: não precisa de conexão persistente, funciona com fire-and-forget
+A estratégia `fastest` garante que o bot reaja o mais rápido possível, mantendo gameplay fluido. Mas como TODAS as respostas são logadas, a análise posterior não perde nada — cada resposta tem sua latência registrada independente de ter sido executada ou não.
+
+### Por que 3 tabelas e não 1?
+
+- `sessions` — normaliza metadados da sessão, evita repetir room_code/bot_username em cada linha
+- `participant_snapshots` — specs de hardware são estáticas dentro de uma sessão, não faz sentido repetir em cada ciclo
+- `cycle_responses` — dados variáveis, uma linha por participante por ciclo
+
+As views `v_latency_by_setup` e `v_fastest_per_cycle` fazem JOINs entre as tabelas para análise.
+
+### Por que Supabase?
+
+- **Centralizado** — todos os dados num só lugar, sem coletar arquivos
+- **Zero dependência** — é um `fetch` POST, sem drivers
+- **Grátis** — free tier com 500MB
+- **SQL** — queries analíticas diretas com JOINs e agregações
+- **REST** — fire-and-forget, sem conexão persistente
 
 ### Por que fire-and-forget?
 
-O loop do bot roda a cada 3 segundos. A prioridade é que o bot continue jogando. Se o log falhar, o bot não pode travar. Por isso o `DataLogger.log()` nunca é `await`-ed — acumula em buffer e envia em batch quando conveniente.
+O loop roda a cada 3s. Com fan-out para N participantes, cada ciclo já espera N respostas LLM. O log não pode adicionar latência. O `DataLogger` acumula em buffer e envia em batch — se falhar, tenta no próximo flush. Se o buffer passar de 500, descarta os mais antigos.
+
+### Por que Chat Completions e não Responses API?
+
+A maioria dos provedores locais (Ollama, LM Studio) suporta `chat/completions` nativamente. A Responses API é mais nova e nem todos implementam. O hub do Gambi faz fallback automático se necessário.
 
 ---
 
@@ -354,42 +358,64 @@ O loop do bot roda a cada 3 segundos. A prioridade é que o bot continue jogando
 ### Pré-requisitos
 
 1. **Bun** instalado
-2. **Servidor Minecraft** Java Edition rodando (Paper MC recomendado)
-3. **Gambi Hub** rodando com pelo menos 1 participante LLM
+2. **Servidor Minecraft** Java Edition rodando
+3. **Gambi Hub** rodando com 2+ participantes LLM
 
 ### Passo a passo
 
 ```bash
-# 1. Em alguma máquina: iniciar o hub
+# 1. Iniciar hub
 gambi serve --port 3000
 
-# 2. Criar uma sala
-gambi create --name "Minecraft AI"
-# → Room code: XK7P2M
+# 2. Criar sala
+gambi create --name "Benchmark AI"
+# → Room code: ABC123
 
-# 3. Quem tem LLM: entrar na sala
-gambi join --code XK7P2M --model llama3 --endpoint http://localhost:11434
+# 3. Cada pessoa com LLM entra
+gambi join --code ABC123 --model llama3       # Máquina A
+gambi join --code ABC123 --model mistral      # Máquina B
 
-# 4. Cada jogador: clonar e rodar o bot
+# 4. Clonar e rodar o bot
 git clone <repo>
 cd minecraft-bot
-cp .env.example .env
-# Editar .env se necessário
-
 bun install
-bun run dev -- --room XK7P2M
+cp .env.example .env
+# Editar .env com SUPABASE_URL e SUPABASE_ANON_KEY
+
+# 5. Executar schema no Supabase SQL Editor
+
+# 6. Rodar
+bun run dev -- --room ABC123
 ```
 
-### Com coleta de dados
+### Exemplo de saída
 
-```bash
-# Adicionar no .env:
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_ANON_KEY=eyJ...
+```
+🤖 Minecraft Bot — Benchmark Fan-out
 
-# Executar schema no Supabase SQL Editor:
-# → conteúdo de supabase/schema.sql
+   Sala: ABC123
+   Hub:  http://localhost:3000
+   Modo: fan-out (todos os participantes)
 
-# Rodar normalmente — métricas são enviadas automaticamente
-bun run dev -- --room XK7P2M
+📊 Session ID: a1b2c3d4-...
+
+🖥️  Participantes online (3):
+   joao — llama3 (GPU: NVIDIA RTX 4090, RAM: 32GB)
+   maria — mistral (GPU: NVIDIA GTX 1080, RAM: 16GB)
+   pedro — qwen2 (GPU: Apple M2 Pro, RAM: 16GB)
+
+━━━ Ciclo #1 (3 participantes) ━━━
+📡 Enviando prompt para todos os participantes...
+   joao [llama3]: ✅ EXPLORAR (842ms)
+   maria [mistral]: ✅ ANDAR (1203ms)
+   pedro [qwen2]: ⚠️  JSON inválido
+🏆 Selecionado: joao [llama3] — EXPLORAR (842ms)
+💭 Raciocínio: Estou num lugar novo, vou explorar para encontrar recursos
+
+━━━ Ciclo #2 (3 participantes) ━━━
+📡 Enviando prompt para todos os participantes...
+   joao [llama3]: ✅ COLETAR (765ms)
+   maria [mistral]: ✅ COLETAR (1450ms)
+   pedro [qwen2]: ✅ EXPLORAR (890ms)
+🏆 Selecionado: joao [llama3] — COLETAR (765ms)
 ```
