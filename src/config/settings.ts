@@ -1,19 +1,7 @@
 /**
  * settings.ts
  *
- * Define configurações globais do bot, Gambiarra Hub e agente.
- * Centraliza parâmetros de conexão, intervalos, limites e raios de percepção.
- *
- * Principais objetos:
- *   - botConfig: configurações do bot Minecraft.
- *   - gambiarraConfig: parâmetros do hub e modelo de IA.
- *   - agentConfig: intervalos, memória, raios de percepção.
- *
- * Extensão:
- *   - Adicionar novos parâmetros ou ajustar valores default.
- *
- * Uso:
- *   Utilizado por todos os módulos para parametrização e controle de comportamento.
+ * Configurações globais do bot, Gambi Hub e agente.
  */
 import type { BotConfig } from '../types/types';
 
@@ -26,10 +14,8 @@ export const botConfig: BotConfig = {
 };
 
 export const gambiarraConfig = {
-  /** URL do hub Gambiarra (pode ser sobrescrito via --hub) */
+  /** URL do hub Gambi (pode ser sobrescrito via --hub) */
   hubUrl: process.env.GAMBIARRA_HUB_URL || 'http://localhost:3000',
-  /** Modelo padrão (pode ser sobrescrito via --model) */
-  model: process.env.GAMBIARRA_MODEL || '*',
 };
 
 export const agentConfig = {
@@ -43,4 +29,8 @@ export const agentConfig = {
   perceptionBlockRadius: 8,
   /** Raio de percepção para entidades (em blocos) */
   perceptionEntityRadius: 16,
+  /** Timeout por participante no fan-out (ms) — evita que 1 máquina lenta trave o ciclo */
+  fanOutTimeoutMs: 30_000,
+  /** Estratégia de seleção da resposta executada: 'fastest' | 'random' */
+  selectionStrategy: 'fastest' as 'fastest' | 'random',
 };

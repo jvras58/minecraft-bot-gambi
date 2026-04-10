@@ -1,22 +1,7 @@
 /**
  * types.ts
  *
- * Define tipos globais do projeto para configuração, contexto do jogo, memória, entidades, inventário e LLM.
- * Centraliza contratos de dados usados por todos os módulos do bot.
- *
- * Principais tipos:
- *   - BotConfig: configurações do bot Minecraft.
- *   - BotAction: ações válidas (importadas do schema).
- *   - GameContext: estado do jogo percebido pelo bot.
- *   - EntityInfo, BlockInfo, InventoryItem: detalhes de entidades, blocos e inventário.
- *   - MemoryEntry: eventos e ações registrados na memória.
- *   - ChatMessage: estrutura de mensagens para LLM.
- *
- * Extensão:
- *   - Adicione novos tipos conforme expansão do bot.
- *
- * Uso:
- *   Referenciado por quase todos os módulos para garantir tipagem consistente.
+ * Tipos globais do projeto — configuração, contexto, memória, LLM, fan-out.
  */
 
 // ─── Bot Config ───────────────────────────────────────────────
@@ -82,6 +67,33 @@ export interface ChatMessage {
 export interface LLMResponse {
   content: string;
   responseTimeMs: number;
+}
+
+// ─── Fan-out ──────────────────────────────────────────────────
+
+/** Resultado de uma chamada LLM a um participante específico */
+export interface FanOutResult {
+  participantId: string;
+  nickname: string;
+  modelName: string;
+  response: LLMResponse | null;
+  error: string | null;
+}
+
+/** Informações de um participante online (espelho do SDK) */
+export interface OnlineParticipant {
+  id: string;
+  nickname: string;
+  model: string;
+  endpoint: string;
+  specs?: {
+    cpu?: string;
+    ram?: string;
+    gpu?: string;
+    vram?: string;
+    os?: string;
+    [key: string]: unknown;
+  };
 }
 
 // ─── Prompts ──────────────────────────────────────────────────

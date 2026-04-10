@@ -1,18 +1,9 @@
 /**
  * index.ts
  *
- * Ponto de entrada do bot Minecraft com IA.
- * Processa argumentos CLI, inicializa configurações e instancia bot, loop e LLM.
- *
- * Principais funções:
- *   - main: processa argumentos, valida sala, inicializa configs.
- *   - printUsage: exibe instruções de uso.
- *
- * Extensão:
- *   - Personalização via argumentos CLI e variáveis de ambiente.
- *
- * Uso:
- *   Executado diretamente para iniciar o bot.
+ * Ponto de entrada do bot Minecraft com IA (modo fan-out benchmark).
+ * O bot envia o mesmo prompt para TODOS os participantes da sala
+ * e loga todas as respostas no Supabase para análise comparativa.
  */
 import { botConfig, gambiarraConfig } from './config/settings';
 import { BotManager } from './bot/BotManager';
@@ -23,43 +14,43 @@ import { parseArgs } from './utils/args';
 
 function printUsage(): void {
   console.log(`
-🤖 Minecraft Bot com IA (via Gambiarra Hub)
+🤖 Minecraft Bot — Benchmark Fan-out (via Gambi Hub)
+
+O bot envia o MESMO prompt para TODOS os participantes da sala em paralelo.
+Cada resposta é logada no Supabase para análise comparativa modelo × hardware.
 
 Uso:
   bun run dev -- --room <ROOM_CODE> [opções]
 
 Opções:
-  --room, -r <code>    Código da sala Gambiarra (obrigatório)
+  --room, -r <code>    Código da sala Gambi (obrigatório)
   --hub <url>          URL do hub (default: ${gambiarraConfig.hubUrl})
-  --model <model>      Roteamento do modelo (default: ${gambiarraConfig.model})
   --help, -h           Mostra esta ajuda
 
-Roteamento de modelo (--model):
-  *                    Qualquer participante online (default)
-  llama3               Primeiro participante com esse modelo
-  participant:joao     Participante específico pelo ID/nickname
-
-Exemplos:
+Exemplo:
   bun run dev -- --room ABC123
   bun run dev -- --room ABC123 --hub http://192.168.1.10:3000
-  bun run dev -- --room ABC123 --model llama3
-  bun run dev -- --room ABC123 --model participant:joao-4090
+
+Variáveis de ambiente:
+  SUPABASE_URL         URL do projeto Supabase (para coleta de dados)
+  SUPABASE_ANON_KEY    Chave anônima do Supabase
+  MINECRAFT_HOST       Host do servidor Minecraft (default: localhost)
+  MINECRAFT_PORT       Porta do servidor (default: 25565)
+  BOT_USERNAME         Nome do bot (default: AgenteBot)
 `);
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
-  // --help
   if (args.help) {
     printUsage();
     process.exit(0);
   }
 
-  // --room é obrigatório
   if (!args.room) {
     console.error('❌ Room code obrigatório!\n');
-    console.error('   Crie uma sala com: gambi create --name "Minecraft AI"');
+    console.error('   Crie uma sala com: gambi create --name "Benchmark AI"');
     console.error('   Depois execute:    bun run dev --room <ROOM_CODE>\n');
     printUsage();
     process.exit(1);
@@ -67,22 +58,21 @@ async function main(): Promise<void> {
 
   const roomCode = args.room;
   const hubUrl = args.hub ?? gambiarraConfig.hubUrl;
-  const model = args.model ?? gambiarraConfig.model;
 
-  console.log('🤖 Minecraft Bot com IA (via Gambiarra Hub)\n');
-  console.log(`   Sala:   ${roomCode}`);
-  console.log(`   Hub:    ${hubUrl}`);
-  console.log(`   Modelo: ${model === '*' ? 'qualquer participante' : model}`);
+  console.log('🤖 Minecraft Bot — Benchmark Fan-out\n');
+  console.log(`   Sala: ${roomCode}`);
+  console.log(`   Hub:  ${hubUrl}`);
+  console.log(`   Modo: fan-out (todos os participantes)\n`);
 
-  // Inicializa o cliente LLM com os args
-  const llm = new GambiLLM({ roomCode, hubUrl, model });
+  // Inicializa o cliente LLM
+  const llm = new GambiLLM({ roomCode, hubUrl });
 
-  // Verifica se o hub está acessível
-  console.log('\n🔍 Verificando conexão com Gambiarra Hub...');
+  // Verifica hub
+  console.log('🔍 Verificando conexão com Gambi Hub...');
   const health = await llm.healthCheck();
   if (!health.ok) {
     console.error('⚠️  Hub não acessível ou sala sem participantes!');
-    console.error('   Continuando mesmo assim (o hub pode subir depois)...\n');
+    console.error('   Continuando mesmo assim (participantes podem entrar depois)...\n');
   } else {
     console.log(`✅ Hub OK — ${health.participants} participante(s) na sala\n`);
   }
@@ -92,10 +82,9 @@ async function main(): Promise<void> {
   const agent = new AgentLoop(botManager, llm, {
     roomCode,
     botUsername: botConfig.username,
-    modelSelector: model,
   });
 
-  // Graceful shutdown — flush de métricas antes de sair
+  // Graceful shutdown
   const shutdown = async () => {
     console.log('\n🛑 Encerrando...');
     await agent.shutdown();
@@ -107,7 +96,7 @@ async function main(): Promise<void> {
   // Conecta e inicia
   botManager.createBot();
   await sleep(2000);
-  agent.start();
+  await agent.start();
 }
 
 main().catch((err) => {
