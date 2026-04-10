@@ -1,75 +1,82 @@
-# 🤖 Minecraft Bot com IA (via Gambi)
+# 🤖 Minecraft Bot — Benchmark Fan-out (via Gambi)
 
-Bot autônomo de Minecraft que usa a sdk**Gambi** como Host de LLM. o bot usa os LLMs compartilhados por participantes em uma sala fornecida pela Gambi.
+Bot autônomo de Minecraft que usa o **Gambi** como hub de LLMs para benchmark comparativo. A cada ciclo de decisão, o bot envia o **mesmo prompt para TODOS os participantes** da sala em paralelo, coleta todas as respostas, executa a mais rápida e loga tudo no Supabase para análise.
 
 ## Como Funciona
 
 ```
-
-│  Minecraft   │────▶│   Minecraft Bot │────▶│  Gambiarra Hub  │
-│   Server     │◀────│   (este app)    │◀────│   (sala LLM)    │
-
-                                                       │
-                                                       ▼
-                                              │  Participantes  │
-                                              │  (Ollama, LM    │
-                                              │   Studio, etc.) │
+┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
+│  Minecraft   │◄────▶│  Minecraft Bot   │◄────▶│   Gambi Hub     │
+│   Server     │      │  (este app)      │      │   (sala LLM)    │
+└──────────────┘      └──────────────────┘      └────────┬────────┘
+                              │                          │
+                              │                    ┌─────┴──────┐
+                              │               ┌────┤  Fan-out   ├────┐
+                              ▼               ▼    └────────────┘    ▼
+                      ┌──────────────┐  ┌──────────┐          ┌──────────┐
+                      │   Supabase   │  │ Máquina A│          │ Máquina B│
+                      │  (métricas)  │  │ llama3   │   ...    │ mistral  │
+                      └──────────────┘  │ RTX 4090 │          │ GTX 1080 │
+                                        └──────────┘          └──────────┘
 ```
 
-O bot:
+O bot a cada ciclo (~3s):
 1. **Percebe** o mundo (vida, fome, entidades, blocos, inventário)
-2. **Raciocina** enviando contexto ao hub Gambiarra via API OpenAI-compatible
-3. **Age** executando a decisão do LLM (andar, falar, coletar, atacar, etc.)
-4. **Memoriza** as últimas 15 ações para evitar loops
+2. **Monta o prompt** uma única vez (system + contexto + memória)
+3. **Fan-out** — envia o mesmo prompt para todos os participantes em paralelo
+4. **Parseia** todas as respostas (JSON + validação Zod)
+5. **Seleciona** a resposta válida mais rápida
+6. **Executa** a ação no Minecraft
+7. **Loga** todas as respostas no Supabase (uma linha por participante por ciclo)
 
 ## Pré-requisitos
 
 - **Bun** (runtime)
-- **Servidor Minecraft** Java Edition rodando (PAPER)
-- **Hub Gambiarra** rodando com pelo menos um participante LLM na sala
+- **Servidor Minecraft** Java Edition (Paper MC recomendado)
+- **Gambi Hub** rodando com 2+ participantes LLM na sala
+- **Supabase** (opcional, para coleta de dados)
 
 ## Setup
 
-### 1. Garanta que o hub Gambiarra está rodando
+### 1. Hub Gambi + Participantes
 
 ```bash
-# Em um terminal
+# Terminal 1 — iniciar o hub
 gambi serve --port 3000
 
-# Em outro terminal
-gambi create --name "Minecraft AI"
+# Terminal 2 — criar sala
+gambi create --name "Benchmark AI"
 # → Room code: ABC123
 
-# Alguém (ou você) entra com um LLM
-gambi join --code ABC123 --model llama3 --endpoint http://localhost:11434
+# Cada pessoa com LLM entra na sala:
+# Máquina A
+gambi join --code ABC123 --model llama3
+
+# Máquina B
+gambi join --code ABC123 --model mistral --endpoint http://localhost:1234
+
+# Máquina C
+gambi join --code ABC123 --model qwen2
 ```
 
-### 2. Configure o Minecraft (opcional)
+O `gambi join` compartilha automaticamente as specs da máquina (CPU, RAM, GPU).
+
+### 2. Supabase (para coleta de dados)
+
+```bash
+# Crie um projeto em supabase.com
+# No SQL Editor, execute o conteúdo de supabase/schema.sql
+# Copie a URL e a anon key
+```
+
+### 3. Configure e execute
 
 ```bash
 cp .env.example .env
-```
+# Edite .env com SUPABASE_URL e SUPABASE_ANON_KEY
 
-Edite o `.env` se o servidor Minecraft não estiver em localhost:
-
-```env
-MINECRAFT_HOST=localhost
-MINECRAFT_PORT=25565
-BOT_USERNAME=AgenteBot
-BOT_AUTH=offline
-```
-
-### 3. Execute
-
-```bash
-# Passe o room code via --room
+bun install
 bun run dev -- --room ABC123
-
-# Ou com opções extras
-bun run dev -- --room ABC123 --hub http://192.168.1.10:3000 --model llama3
-
-# Ver ajuda
-bun run dev -- --help
 ```
 
 ## CLI
@@ -78,53 +85,70 @@ bun run dev -- --help
 bun run dev -- --room <ROOM_CODE> [opções]
 
 Opções:
-  --room, -r <code>    Código da sala Gambiarra (obrigatório)
+  --room, -r <code>    Código da sala Gambi (obrigatório)
   --hub <url>          URL do hub (default: http://localhost:3000)
-  --model <model>      Modelo a usar, "*" = qualquer (default: *)
   --help, -h           Mostra ajuda
 ```
 
-## Configuração
+Não é necessário `--model` — o bot envia para **todos** os participantes automaticamente.
 
-O room code vem via CLI. O resto pode ser configurado via `.env` ou CLI args (CLI tem prioridade):
+## Configuração
 
 | Origem | Variável / Flag | Descrição | Default |
 |--------|-----------------|-----------|---------|
 | CLI | `--room` | Código da sala | (obrigatório) |
 | CLI | `--hub` | URL do hub | `http://localhost:3000` |
-| CLI | `--model` | Modelo a usar | `*` |
-| .env | `GAMBIARRA_HUB_URL` | Fallback para --hub | `http://localhost:3000` |
-| .env | `GAMBIARRA_MODEL` | Fallback para --model | `*` |
-| .env | `MINECRAFT_HOST` | Host do servidor Minecraft | `localhost` |
+| .env | `SUPABASE_URL` | URL do Supabase | (desativado) |
+| .env | `SUPABASE_ANON_KEY` | Chave anônima | (desativado) |
+| .env | `MINECRAFT_HOST` | Host do servidor | `localhost` |
 | .env | `MINECRAFT_PORT` | Porta do servidor | `25565` |
-| .env | `BOT_USERNAME` | Nome do bot no jogo | `AgenteBot` |
-| .env | `BOT_AUTH` | Tipo de autenticação | `offline` |
+| .env | `BOT_USERNAME` | Nome do bot | `AgenteBot` |
+
+## Banco de Dados (Supabase)
+
+### 3 tabelas
+
+| Tabela | Descrição |
+|--------|-----------|
+| `sessions` | Metadados de cada sessão de benchmark |
+| `participant_snapshots` | Specs de hardware de cada máquina (CPU, RAM, GPU, VRAM, OS) |
+| `cycle_responses` | Uma linha por participante por ciclo — latência, ação, se foi executada |
+
+### Views de análise
+
+| View | Descrição |
+|------|-----------|
+| `v_latency_by_setup` | Latência média/p50/p95 por modelo × GPU |
+| `v_fastest_per_cycle` | Qual setup teve menor latência em cada ciclo |
 
 ## Arquitetura
 
 ```
 src/
-├── index.ts              # Bootstrap
+├── index.ts                  # Bootstrap (modo fan-out)
 ├── config/
-│   └── settings.ts       # Configurações (Gambiarra + Minecraft)
-├── bot/                   # Camada Minecraft (Mineflayer)
-│   ├── ActionExecutor.ts  # Executa ações (FALAR, ANDAR, SEGUIR, etc.)
-│   ├── BotManager.ts      # Conexão e eventos do bot
-│   ├── MovementManager.ts # Controle de movimento
-│   └── PerceptionManager.ts # Percepção rica do ambiente
-├── core/                  # Lógica principal
-│   ├── AgentLoop.ts       # Loop: Percepção → Raciocínio → Ação
-│   └── MemoryManager.ts   # Memória de curto prazo (ring buffer)
+│   └── settings.ts           # Configurações (Gambi + Minecraft + Benchmark)
+├── bot/                      # Camada Minecraft (Mineflayer)
+│   ├── ActionExecutor.ts     # Executa ações (FALAR, ANDAR, SEGUIR, etc.)
+│   ├── BotManager.ts         # Conexão e eventos do bot
+│   ├── MovementManager.ts    # Controle de movimento
+│   └── PerceptionManager.ts  # Percepção do ambiente
+├── core/                     # Lógica principal
+│   ├── AgentLoop.ts          # Loop fan-out: prompt → todos → seleciona → executa
+│   ├── MemoryManager.ts      # Memória de curto prazo (ring buffer)
+│   └── DataLogger.ts         # Envia métricas para Supabase (3 tabelas)
 ├── llm/
-│   └── GambiarraLLM.ts    # Cliente LLM via hub Gambiarra
+│   └── GambiarraLLM.ts       # Cliente LLM com invokeAll() para fan-out
 ├── prompts/
-│   └── botPrompts.ts      # Prompts com chain-of-thought
+│   └── botPrompts.ts         # System prompt + template
 ├── schemas/
-│   └── botAction.ts       # Schema Zod das ações
+│   └── botAction.ts          # Schema Zod das ações
 ├── types/
-│   └── types.ts           # Interfaces TypeScript
+│   ├── types.ts              # Interfaces TypeScript
+│   └── gambi-sdk.d.ts        # Tipos do SDK Gambi
 └── utils/
-    ├── jsonParser.ts      # Parse resiliente com jsonrepair
+    ├── args.ts               # Parser CLI
+    ├── jsonParser.ts          # Parse + reparo de JSON
     └── sleep.ts
 ```
 
@@ -143,3 +167,26 @@ src/
 | `COLETAR` | Minera/coleta bloco próximo |
 | `ATACAR` | Ataca entidade próxima |
 | `NADA` | Apenas observa |
+
+## Saída do Terminal
+
+```
+🤖 Minecraft Bot — Benchmark Fan-out
+
+   Sala: ABC123
+   Hub:  http://localhost:3000
+   Modo: fan-out (todos os participantes)
+
+🖥️  Participantes online (3):
+   joao — llama3 (GPU: NVIDIA RTX 4090, RAM: 32GB)
+   maria — mistral (GPU: NVIDIA GTX 1080, RAM: 16GB)
+   pedro — qwen2 (GPU: Apple M2 Pro, RAM: 16GB)
+
+━━━ Ciclo #1 (3 participantes) ━━━
+📡 Enviando prompt para todos os participantes...
+   joao [llama3]: ✅ EXPLORAR (842ms)
+   maria [mistral]: ✅ ANDAR (1203ms)
+   pedro [qwen2]: ✅ COLETAR (956ms)
+🏆 Selecionado: joao [llama3] — EXPLORAR (842ms)
+💭 Raciocínio: Estou num lugar novo, vou explorar para encontrar recursos
+```
