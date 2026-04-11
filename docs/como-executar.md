@@ -1,62 +1,142 @@
 # Como Executar o Bot
 
-Guia rapido para rodar o Minecraft Bot Gambiarra sem instalar nada manualmente.
+Guia rapido para rodar o Minecraft Bot Gambiarra.
 
 ## Pre-requisitos
 
 - **Gambiarra Hub** rodando com pelo menos 1 participante na sala
 - **Servidor Minecraft Java** acessivel (local ou remoto)
-- Conexao com internet (para instalar Bun na primeira vez)
 
-## Windows
+---
 
-Duplo-clique no arquivo `iniciar.bat` na raiz do projeto.
+## Opcao 1: Executavel Standalone (sem instalar nada)
 
-O script vai:
+Alguem ja compilou o bot pra voce. Voce recebe uma pasta `dist/` com:
 
-1. Verificar se o Bun esta instalado (se nao, instala automaticamente)
-2. Instalar as dependencias do projeto (`bun install`)
-3. Perguntar as configuracoes:
-   - **Room Code** — codigo da sala no Gambiarra Hub (obrigatorio)
-   - **Hub URL** — endereco do hub (padrao: `http://localhost:3000`)
-   - **Minecraft Host** — IP/endereco do servidor (padrao: `localhost`)
-   - **Minecraft Porta** — porta do servidor (padrao: `25565`)
-   - **Nome do Bot** — nome que aparece no jogo (padrao: `BotGambiarra`)
-4. Salvar tudo no `.env`
-5. Iniciar o bot
+```
+dist/
+  minecraft-bot.exe   (Windows) ou minecraft-bot (Linux)
+  iniciar.bat         (Windows) ou iniciar.sh   (Linux)
+```
 
-Para parar o bot, pressione `Ctrl+C` na janela do terminal.
+### Windows
 
-## Linux / Ubuntu
+Duplo-clique em `iniciar.bat`. Ele vai perguntar:
 
-Abra o terminal na pasta do projeto e execute:
+- **Room Code** — codigo da sala no Gambiarra Hub (obrigatorio)
+- **Hub URL** — endereco do hub (padrao: `http://localhost:3000`)
+- **Minecraft Host** — IP do servidor (padrao: `localhost`)
+- **Minecraft Porta** — porta do servidor (padrao: `25565`)
+- **Nome do Bot** — nome no jogo (padrao: `BotGambiarra`)
+
+Pronto. O bot inicia. `Ctrl+C` para parar.
+
+### Linux
 
 ```bash
 chmod +x iniciar.sh
 ./iniciar.sh
 ```
 
-O fluxo e o mesmo do Windows: verifica Bun, instala dependencias, pergunta configuracoes e inicia o bot.
+Mesmas perguntas, mesmo fluxo.
 
-### Observacoes para Linux
+### Uso direto (sem launcher)
 
-- O Bun e instalado via `curl` (ou `wget` se curl nao estiver disponivel)
-- Caso o Bun nao seja encontrado no PATH apos a instalacao, feche o terminal, abra novamente e rode `./iniciar.sh` de novo
+```bash
+# Windows
+minecraft-bot.exe --room SEU_ROOM_CODE --hub http://localhost:3000
 
-## Execucao manual (se preferir)
+# Linux
+./minecraft-bot --room SEU_ROOM_CODE --hub http://localhost:3000
+```
 
-Se voce ja tem o Bun instalado e quer pular o launcher:
+As configuracoes de servidor Minecraft ficam no `.env` ao lado do executavel:
+
+```env
+MINECRAFT_HOST=localhost
+MINECRAFT_PORT=25565
+BOT_USERNAME=BotGambiarra
+BOT_AUTH=offline
+```
+
+---
+
+## Opcao 2: Rodar do codigo-fonte (com Bun)
+
+Se voce quer modificar o bot ou nao tem o executavel compilado.
+
+### Windows
+
+Duplo-clique em `iniciar.bat` na raiz do projeto. Ele:
+
+1. Instala o Bun automaticamente (se necessario)
+2. Roda `bun install`
+3. Pergunta as configuracoes
+4. Inicia o bot
+
+### Linux
+
+```bash
+chmod +x iniciar.sh
+./iniciar.sh
+```
+
+### Manual
 
 ```bash
 bun install
 bun run dev -- --room SEU_ROOM_CODE
-```
-
-Opcoes extras:
-
-```bash
 bun run dev -- --room SEU_ROOM_CODE --hub http://outro-host:3000
 ```
+
+---
+
+## Compilar o executavel (para distribuir)
+
+Voce precisa do Bun instalado para compilar. O resultado e um binario unico que nao precisa de Bun pra rodar.
+
+### Windows
+
+Duplo-clique em `compilar.bat` ou rode:
+
+```bash
+bun install
+bun run build:win
+```
+
+Gera: `dist/minecraft-bot.exe`
+
+### Linux
+
+```bash
+chmod +x compilar.sh
+./compilar.sh
+```
+
+Ou manualmente:
+
+```bash
+bun install
+bun run build:linux
+```
+
+Gera: `dist/minecraft-bot`
+
+### Cross-compilation
+
+Voce pode compilar pra outro sistema a partir do seu:
+
+```bash
+# No Linux, compilar pra Windows:
+bun run build:win
+
+# No Windows, compilar pra Linux:
+bun run build:linux
+```
+
+Depois distribua a pasta `dist/` — ela contem o executavel + launcher.
+
+---
 
 ## Solucao de problemas
 
@@ -65,4 +145,5 @@ bun run dev -- --room SEU_ROOM_CODE --hub http://outro-host:3000
 | "Bun nao encontrado" apos instalar | Feche e abra o terminal novamente |
 | Erro de conexao com o Hub | Verifique se o Gambiarra Hub esta rodando |
 | Bot nao entra no servidor | Confira host, porta e se o servidor aceita bots offline |
-| Timeout nas respostas | Verifique se ha participantes online na sala do Gambiarra |
+| Timeout nas respostas | Verifique se ha participantes online na sala |
+| Compilacao falha | Rode `bun install` antes de compilar |

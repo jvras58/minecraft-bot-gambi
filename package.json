@@ -6,7 +6,10 @@
     "dev": "bun run --watch src/index.ts --",
     "start": "bun run src/index.ts --",
     "check-types": "tsc --noEmit",
-    "tests": "bun run tests/test-connection.ts"
+    "tests": "bun run tests/test-connection.ts",
+    "build": "bun build --compile src/index.ts --outfile dist/minecraft-bot",
+    "build:win": "bun build --compile --target=bun-windows-x64 src/index.ts --outfile dist/minecraft-bot.exe",
+    "build:linux": "bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/minecraft-bot"
   },
   "dependencies": {
     "ai": "^6.0.6",
