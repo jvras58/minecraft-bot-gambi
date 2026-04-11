@@ -59,8 +59,12 @@ echo.
 echo   Crie um .env ao lado do .exe com:
 echo     MINECRAFT_HOST=localhost
 echo     MINECRAFT_PORT=25565
-echo     BOT_USERNAME=BotGambiarra
+echo     BOT_USERNAME=nomeDoBot
 echo     BOT_AUTH=offline
+echo     Se DESEJAR usar Supabase para salvar logs, adicione:
+echo     SUPABASE_URL=xxxxxxxxxx
+echo     SUPABASE_ANON_KEY=xxxxxx
+echo     SUPABASE_TABLE=xxxxxx
 echo  ══════════════════════════════════════
 echo.
 pause
