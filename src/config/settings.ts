@@ -31,7 +31,7 @@ export const agentConfig = {
   /** Raio de percepção para entidades (em blocos) */
   perceptionEntityRadius: 16,
   /** Timeout por participante no fan-out (ms) — evita que 1 máquina lenta trave o ciclo */
-  fanOutTimeoutMs: 30_000,
+  fanOutTimeoutMs: 120_000,
   /** Estratégia de seleção da resposta executada: 'fastest' | 'random' */
   selectionStrategy: 'fastest' as 'fastest' | 'random',
 };
