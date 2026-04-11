@@ -35,7 +35,6 @@ export class BotManager {
 
   createBot(): void {
     console.log('🔌 Conectando ao servidor Minecraft...');
-    console.log('🔧 Config:', JSON.stringify({ host: this.config.host, port: this.config.port, version: this.config.version, username: this.config.username, auth: this.config.auth }));
     this.bot = mineflayer.createBot(this.config);
     this.setupEvents();
   }
