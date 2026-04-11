@@ -53,12 +53,16 @@ Abra o arquivo `server.properties` e altere as seguintes linhas para permitir bo
 online-mode=false
 max-players=20
 
+enforce-secure-profile=false
+
 # Aumenta o tempo que o servidor espera antes de chutar alguém (Para não ficar chutando o bot)
 network-compression-threshold=-1
 max-tick-time=-1
 player-idle-timeout=0
 ```
 
+- `online-mode=false`: Usa modo offline para permitir bots que não têm autenticação Mojang.
+- `enforce-secure-profile=false`: Essa opção é crítica em provedores como BedHosting. Se ficar `true`, o servidor exige perfis assinados pela Mojang, e bots offline não conseguem entrar.
 - `network-compression-threshold=-1`: Desativa a compressão de dados. Isso deixa a conexão um pouco mais "gorda", mas tira o peso da CPU de ficar compactando dados, o que ajuda o bot a responder mais rápido.
 - `player-idle-timeout=0`: Impede o servidor de chutar jogadores parados (AFK).
 
