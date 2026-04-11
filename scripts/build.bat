@@ -10,7 +10,7 @@ echo   Minecraft Bot Gambiarra - Build
 echo  ══════════════════════════════════════
 echo.
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 :: ─── Bun ─────────────────────────────────────────────────
 where bun >nul 2>&1
@@ -46,6 +46,17 @@ if %ERRORLEVEL% neq 0 (
     echo  ERRO na compilacao.
     pause
     exit /b 1
+)
+
+:: ─── Gerar .env padrao ──────────────────────────────────
+if not exist "dist\.env" (
+    echo  Gerando .env padrao...
+    (
+        echo MINECRAFT_HOST=localhost
+        echo MINECRAFT_PORT=25565
+        echo BOT_USERNAME=BotGambiarra
+        echo BOT_AUTH=offline
+    ) > "dist\.env"
 )
 
 echo.

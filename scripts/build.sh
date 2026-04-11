@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 echo ""
 echo "  ══════════════════════════════════════"
@@ -37,6 +37,17 @@ echo "  Compilando..."
 mkdir -p dist
 bun build --compile src/index.ts --outfile dist/minecraft-bot
 chmod +x dist/minecraft-bot
+
+# ─── Gerar .env padrao ────────────────────────────────────
+if [ ! -f "dist/.env" ]; then
+    echo "  Gerando .env padrao..."
+    cat > dist/.env << 'ENVEOF'
+MINECRAFT_HOST=localhost
+MINECRAFT_PORT=25565
+BOT_USERNAME=BotGambiarra
+BOT_AUTH=offline
+ENVEOF
+fi
 
 echo ""
 echo "  ══════════════════════════════════════"

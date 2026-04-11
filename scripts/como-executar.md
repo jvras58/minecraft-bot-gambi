@@ -7,29 +7,47 @@
 
 ## Compilar
 
-O script verifica se o Bun esta instalado, instala se precisar, e compila o executavel.
+O script verifica se o Bun esta instalado, instala se precisar, e gera o executavel.
 
-**Windows:** duplo-clique em `build.bat`
+**Windows:** duplo-clique em `scripts/build.bat`
 
 **Linux:**
 ```bash
-chmod +x build.sh
-./build.sh
+chmod +x scripts/build.sh
+./scripts/build.sh
 ```
 
-O executavel e gerado em `dist/minecraft-bot` (ou `dist/minecraft-bot.exe` no Windows).
+Ao final voce tera a pasta `dist/` com:
+
+```
+dist/
+  minecraft-bot.exe   (Windows) ou minecraft-bot (Linux)
+  .env                (configuracao do servidor Minecraft)
+```
 
 ## Rodar
 
-```bash
-# minimo (usa localhost:3000 como hub)
-./minecraft-bot --room SEU_ROOM_CODE
+Abra um terminal na pasta `dist/` e rode:
 
-# com hub customizado
-./minecraft-bot --room SEU_ROOM_CODE --hub http://192.168.1.10:3000
+```bash
+# Windows
+minecraft-bot.exe --room SEU_ROOM_CODE
+
+# Linux
+./minecraft-bot --room SEU_ROOM_CODE
 ```
 
-Crie um `.env` ao lado do executavel para configurar o servidor Minecraft:
+Para usar um hub em outro endereco:
+
+```bash
+minecraft-bot.exe --room SEU_ROOM_CODE --hub http://192.168.1.10:3000
+```
+
+`Ctrl+C` para parar.
+
+## Configuracao do Minecraft
+
+Edite o `.env` dentro de `dist/` antes de rodar:
 
 ```env
 MINECRAFT_HOST=localhost
@@ -38,7 +56,13 @@ BOT_USERNAME=BotGambiarra
 BOT_AUTH=offline
 ```
 
-`Ctrl+C` para parar o bot.
+Para salvar logs no Supabase (opcional), adicione:
+
+```env
+SUPABASE_URL=https://seu-projeto.supabase.co
+SUPABASE_ANON_KEY=sua-chave
+SUPABASE_TABLE=bot_cycles
+```
 
 ## Cross-compilation
 
