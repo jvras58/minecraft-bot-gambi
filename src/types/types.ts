@@ -10,6 +10,7 @@ export interface BotConfig {
   port: number;
   username: string;
   auth: 'offline' | 'microsoft';
+  version?: string;
   checkTimeoutInterval: number;
 }
 

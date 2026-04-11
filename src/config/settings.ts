@@ -10,6 +10,7 @@ export const botConfig: BotConfig = {
   port: parseInt(process.env.MINECRAFT_PORT || '25565'),
   username: process.env.BOT_USERNAME || 'AgenteBot',
   auth: (process.env.BOT_AUTH as 'offline' | 'microsoft') || 'offline',
+  version: process.env.MINECRAFT_VERSION || '1.21.11',
   checkTimeoutInterval: 60_000,
 };
 
