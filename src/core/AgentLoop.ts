@@ -24,6 +24,7 @@ import { botActionSchema } from '../schemas/botAction';
 import { botPromptTemplate } from '../prompts/botPrompts';
 import { sleep } from '../utils/sleep';
 import { safeParseJSON } from '../utils/jsonParser';
+import { normalizeAction } from '../utils/fuzzyAction';
 import { agentConfig } from '../config/settings';
 
 /** Resposta parseada de um participante */
@@ -162,7 +163,7 @@ export class AgentLoop {
           const status = p.llmError
             ? `❌ ${p.llmError.slice(0, 50)}`
             : p.parseError
-              ? `⚠️  JSON inválido`
+              ? `⚠️  JSON inválido\n      📝 Raw: ${p.rawResponse.slice(0, 500)}`
               : `✅ ${p.action?.acao ?? '?'} (${p.responseTimeMs.toFixed(0)}ms)`;
           console.log(`   ${p.nickname} [${p.modelName}]: ${status}`);
         }
@@ -260,7 +261,8 @@ export class AgentLoop {
     }
 
     try {
-      const action = botActionSchema.parse(data);
+      const normalized = typeof data === 'object' && data !== null ? normalizeAction(data as Record<string, unknown>) : data;
+      const action = botActionSchema.parse(normalized);
       return {
         participantId: result.participantId,
         nickname: result.nickname,
@@ -273,7 +275,10 @@ export class AgentLoop {
         parseError: false,
         llmError: null,
       };
-    } catch {
+    } catch (zodErr) {
+      const zodMsg = zodErr instanceof Error ? zodErr.message : String(zodErr);
+      console.log(`      🔍 Zod error: ${zodMsg.slice(0, 200)}`);
+      console.log(`      🔍 Parsed data: ${JSON.stringify(data).slice(0, 300)}`);
       return {
         participantId: result.participantId,
         nickname: result.nickname,
