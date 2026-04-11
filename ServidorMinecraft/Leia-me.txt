@@ -1,0 +1,5 @@
+Recomendo reler o arquivo readme.
+
+Este script .jar será executado corretamente se você seguir cuidadosamente as instruções passo a passo.
+
+Executando o start.bat ele vai gerar arquivos que serão ignorados pelo gitignore...
