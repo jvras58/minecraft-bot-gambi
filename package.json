@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts --",
     "start": "bun run src/index.ts --",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "tests": "bun run tests/test-connection.ts"
   },
   "dependencies": {
     "ai": "^6.0.6",
