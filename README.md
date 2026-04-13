@@ -5,10 +5,10 @@ Bot autônomo de Minecraft que usa o **Gambi** como hub de LLMs para benchmark c
 ## Como Funciona
 
 ```
-┌──────────────┐      ┌──────────────────┐      ┌─────────────────┐
+┌──────────────┐      ┌──────────────────┐       ┌─────────────────┐
 │  Minecraft   │◄────▶│  Minecraft Bot   │◄────▶│   Gambi Hub     │
-│   Server     │      │  (este app)      │      │   (sala LLM)    │
-└──────────────┘      └──────────────────┘      └────────┬────────┘
+│   Server     │      │  (este app)      │       │   (sala LLM)    │
+└──────────────┘      └──────────────────┘       └────────┬────────┘
                               │                          │
                               │                    ┌─────┴──────┐
                               │               ┌────┤  Fan-out   ├────┐
@@ -16,7 +16,7 @@ Bot autônomo de Minecraft que usa o **Gambi** como hub de LLMs para benchmark c
                       ┌──────────────┐  ┌──────────┐          ┌──────────┐
                       │   Supabase   │  │ Máquina A│          │ Máquina B│
                       │  (métricas)  │  │ llama3   │   ...    │ mistral  │
-                      └──────────────┘  │ RTX 4090 │          │ GTX 1080 │
+                      └──────────────┘  │          │          │ GTX 1080 │
                                         └──────────┘          └──────────┘
 ```
 
