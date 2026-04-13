@@ -5,12 +5,12 @@
  * O bot envia o mesmo prompt para TODOS os participantes da sala
  * e loga todas as respostas no Supabase para análise comparativa.
  */
-import { botConfig, gambiarraConfig } from './config/settings';
-import { BotManager } from './bot/BotManager';
-import { AgentLoop } from './core/AgentLoop';
-import { GambiLLM } from './llm/GambiarraLLM';
-import { sleep } from './utils/sleep';
-import { parseArgs } from './utils/args';
+import { botConfig, gambiarraConfig } from '@/config/settings';
+import { BotManager } from '@/bot/BotManager';
+import { AgentLoop } from '@/core/AgentLoop';
+import { GambiLLM } from '@/llm/GambiarraLLM';
+import { sleep } from '@/utils/sleep';
+import { parseArgs } from '@/utils/args';
 
 function printUsage(): void {
   console.log(`

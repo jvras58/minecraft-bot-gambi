@@ -7,8 +7,8 @@
  */
 import { createGambi, type GambiProvider } from 'gambi-sdk';
 import { generateText } from 'ai';
-import type { ChatMessage, LLMResponse, FanOutResult, OnlineParticipant } from '../types/types';
-import { agentConfig } from '../config/settings';
+import type { ChatMessage, LLMResponse, FanOutResult, OnlineParticipant } from '@/types/types';
+import { agentConfig } from '@/config/settings';
 
 export interface GambiLLMOptions {
   roomCode: string;

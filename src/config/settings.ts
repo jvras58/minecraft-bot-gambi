@@ -3,7 +3,7 @@
  *
  * Configurações globais do bot, Gambi Hub e agente.
  */
-import type { BotConfig } from '../types/types';
+import type { BotConfig } from '@/types/types';
 
 export const botConfig: BotConfig = {
   host: process.env.MINECRAFT_HOST || 'localhost',

@@ -13,7 +13,7 @@
  * Uso:
  *   Utilizado por AgentLoop para gerar prompts para GambiarraLLM.
  */
-import type { PromptTemplate } from '../types/types';
+import type { PromptTemplate } from '@/types/types';
 
 export const botPromptTemplate: PromptTemplate = {
   system: `Você é um bot autônomo de Minecraft — aventureiro, curioso e adaptável.

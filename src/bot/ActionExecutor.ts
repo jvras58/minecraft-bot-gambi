@@ -14,17 +14,9 @@
  *   Utilizado por AgentLoop para executar ações validadas pelo schema.
  */
 import type { Bot } from 'mineflayer';
-import type { BotAction } from '../types/types';
-import { MovementManager } from './MovementManager';
+import type { BotAction, ActionResult } from '@/types/types';
+import { MovementManager } from '@/bot/MovementManager';
 
-export interface ActionResult {
-  success: boolean;
-  action: string;
-  direction?: string;
-  content?: string;
-  errorMessage?: string;
-  executionTimeMs: number;
-}
 
 export class ActionExecutor {
   private bot: Bot;

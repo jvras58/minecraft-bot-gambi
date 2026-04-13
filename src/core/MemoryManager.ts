@@ -13,8 +13,8 @@
  * Uso:
  *   Utilizado por AgentLoop para fornecer contexto recente ao LLM.
  */
-import type { MemoryEntry } from '../types/types';
-import { agentConfig } from '../config/settings';
+import type { MemoryEntry } from '@/types/types';
+import { agentConfig } from '@/config/settings';
 
 export class MemoryManager {
   private entries: MemoryEntry[] = [];

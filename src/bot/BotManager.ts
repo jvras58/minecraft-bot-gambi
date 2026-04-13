@@ -14,8 +14,8 @@
  *   Utilizado por AgentLoop e index.ts para controle do bot.
  */
 import mineflayer, { type Bot } from 'mineflayer';
-import type { BotConfig } from '../types/types';
-import { MovementManager } from './MovementManager';
+import type { BotConfig } from '@/types/types';
+import { MovementManager } from '@/bot/MovementManager';
 
 export class BotManager {
   private bot: Bot | null = null;

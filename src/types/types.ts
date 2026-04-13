@@ -97,8 +97,67 @@ export interface OnlineParticipant {
   };
 }
 
+// ─── Data Logger ─────────────────────────────────────────────
+export interface CycleResponseData {
+  // Sessão & Ciclo
+  session_id: string;
+  cycle_number: number;
+  room_code: string;
+
+  // Participante
+  participant_id: string;
+  participant_nickname: string;
+  model_name: string;
+
+  // LLM
+  llm_response_time_ms: number | null;
+  llm_raw_length: number | null;
+  llm_json_repaired: boolean;
+  llm_parse_error: boolean;
+  llm_error: string | null;
+
+  // Ação parseada
+  action: string | null;
+  reasoning: string | null;
+  direction: string | null;
+  target: string | null;
+  content: string | null;
+  raw_response: string | null;
+
+  // Execução
+  was_executed: boolean;
+  action_success: boolean | null;
+  action_execution_time_ms: number | null;
+  action_error: string | null;
+
+  // Contexto do jogo
+  health: number;
+  food: number;
+  pos_x: number;
+  pos_y: number;
+  pos_z: number;
+  biome: string;
+  weather: string;
+  time_of_day: number;
+  is_moving: boolean;
+  nearby_players: number;
+  nearby_entities: number;
+  nearby_blocks: number;
+  inventory_items: number;
+}
+
 // ─── Prompts ──────────────────────────────────────────────────
 export interface PromptTemplate {
   system: string;
   human: string;
+}
+
+// metricas de ações
+export interface ActionResult {
+  success: boolean;
+  action: string;
+  direction?: string;
+  content?: string;
+  errorMessage?: string;
+  executionTimeMs: number;
 }

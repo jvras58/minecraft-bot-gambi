@@ -19,8 +19,8 @@ import type {
   EntityInfo,
   BlockInfo,
   InventoryItem,
-} from '../types/types';
-import { agentConfig } from '../config/settings';
+} from '@/types/types';
+import { agentConfig } from '@/config/settings';
 
 const BORING_BLOCKS = new Set([
   'air', 'cave_air', 'void_air', 'stone', 'dirt', 'grass_block',

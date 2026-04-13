@@ -13,12 +13,12 @@
  *   7. Memória — registra o que aconteceu
  *   8. Log — envia TODAS as respostas para Supabase (uma linha por participante)
  */
-import type { BotAction, ChatMessage, FanOutResult, GameContext, OnlineParticipant } from '../types/types';
-import { BotManager } from '../bot/BotManager';
-import { ActionExecutor, type ActionResult } from '../bot/ActionExecutor';
-import { PerceptionManager } from '../bot/PerceptionManager';
-import { MemoryManager } from './MemoryManager';
-import { DataLogger, type CycleResponseData } from './DataLogger';
+import type { BotAction, ChatMessage, FanOutResult, GameContext, OnlineParticipant, ActionResult, CycleResponseData } from '@/types/types';
+import { BotManager } from '@/bot/BotManager';
+import { ActionExecutor } from '@/bot/ActionExecutor';
+import { PerceptionManager } from '@/bot/PerceptionManager';
+import { MemoryManager } from '@/core/MemoryManager';
+import { DataLogger } from '@/core/DataLogger';
 import { GambiLLM } from '../llm/GambiarraLLM';
 import { botActionSchema } from '../schemas/botAction';
 import { botPromptTemplate } from '../prompts/botPrompts';
