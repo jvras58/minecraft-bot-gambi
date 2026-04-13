@@ -84,7 +84,10 @@ CREATE TABLE cycle_responses (
   nearby_players integer,
   nearby_entities integer,
   nearby_blocks integer,
-  inventory_items integer
+  inventory_items integer,
+
+  -- ─── Prompt -──
+  prompt_sent TEXT
 );
 
 -- ─── Índices para consultas comuns ─────────────────────────
