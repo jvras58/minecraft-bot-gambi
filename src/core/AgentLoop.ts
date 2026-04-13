@@ -188,7 +188,7 @@ export class AgentLoop {
         }
 
         // 8. LOG — todas as respostas, marcando qual foi executada
-        this.logAllResponses(parsed, selected, actionResult, gameCtx);
+        this.logAllResponses(parsed, selected, actionResult, gameCtx, messages);
 
         await sleep(agentConfig.loopIntervalMs);
       } catch (err) {
@@ -274,7 +274,10 @@ export class AgentLoop {
     selected: ParsedResponse,
     actionResult: ActionResult,
     gameCtx: GameContext,
+    messages: ChatMessage[],
   ): void {
+    const promptSent = messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n');
+
     const rows: CycleResponseData[] = parsed.map((p) => {
       const isSelected = p.participantId === selected.participantId;
 
@@ -304,6 +307,8 @@ export class AgentLoop {
         action_success: isSelected ? actionResult.success : null,
         action_execution_time_ms: isSelected ? actionResult.executionTimeMs : null,
         action_error: isSelected ? (actionResult.errorMessage ?? null) : null,
+
+        prompt_sent: promptSent,
 
         health: gameCtx.vida,
         food: gameCtx.fome,

@@ -124,6 +124,9 @@ export interface CycleResponseData {
   action_execution_time_ms: number | null;
   action_error: string | null;
 
+  // Prompt enviado (mesmo para todos os participantes do ciclo)
+  prompt_sent: string;
+
   // Contexto do jogo
   health: number;
   food: number;
