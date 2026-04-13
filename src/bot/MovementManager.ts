@@ -1,6 +1,15 @@
 /** Controla movimentação do bot (andar, seguir, fugir, explorar). */
 import type { Bot, ControlState } from 'mineflayer';
 
+const DIRECTION_MAP: Record<string, ControlState> = {
+  frente: 'forward',
+  tras: 'back',
+  esquerda: 'left',
+  direita: 'right',
+};
+
+const ALL_DIRS: ControlState[] = ['forward', 'back', 'left', 'right'];
+
 export class MovementManager {
   private bot: Bot;
   private moveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -12,18 +21,10 @@ export class MovementManager {
   andarNaDirecao(direcao: string): void {
     this.pararMovimento();
 
-    const map: Record<string, ControlState> = {
-      frente: 'forward',
-      tras: 'back',
-      esquerda: 'left',
-      direita: 'right',
-    };
-
     if (direcao === 'aleatorio') {
-      const dirs: ControlState[] = ['forward', 'back', 'left', 'right'];
-      this.bot.setControlState(dirs[Math.floor(Math.random() * dirs.length)]!, true);
+      this.bot.setControlState(ALL_DIRS[Math.floor(Math.random() * ALL_DIRS.length)]!, true);
     } else {
-      const ctrl = map[direcao];
+      const ctrl = DIRECTION_MAP[direcao];
       if (ctrl) this.bot.setControlState(ctrl, true);
     }
 
@@ -32,26 +33,19 @@ export class MovementManager {
 
   explorarAleatorio(): void {
     this.pararMovimento();
-
-    const dirs: ControlState[] = ['forward', 'back', 'left', 'right'];
-    this.bot.setControlState(dirs[Math.floor(Math.random() * dirs.length)]!, true);
+    this.bot.setControlState(ALL_DIRS[Math.floor(Math.random() * ALL_DIRS.length)]!, true);
     this.bot.look(Math.random() * Math.PI * 2, 0);
-
     this.autoStop(3000 + Math.random() * 3000);
   }
 
   seguirJogador(nome: string): void {
     this.pararMovimento();
-
     const player = this.bot.players[nome];
-    if (!player?.entity) {
-      throw new Error(`Jogador ${nome} não encontrado ou fora do alcance`);
-    }
+    if (!player?.entity) throw new Error(`Jogador ${nome} não encontrado ou fora do alcance`);
 
     this.bot.lookAt(player.entity.position.offset(0, 1.6, 0));
     this.bot.setControlState('forward', true);
     this.bot.setControlState('sprint', true);
-
     this.autoStop(3000);
   }
 
@@ -59,22 +53,17 @@ export class MovementManager {
     this.pararMovimento();
 
     const entity = Object.values(this.bot.entities).find(
-      (e) =>
-        e.username === nome ||
-        e.displayName === nome ||
-        `entity_${e.id}` === nome,
+      (e) => e.username === nome || e.displayName === nome || `entity_${e.id}` === nome,
     );
 
     if (entity) {
       const dx = this.bot.entity.position.x - entity.position.x;
       const dz = this.bot.entity.position.z - entity.position.z;
-      const yaw = Math.atan2(-dx, dz);
-      this.bot.look(yaw, 0);
+      this.bot.look(Math.atan2(-dx, dz), 0);
     }
 
     this.bot.setControlState('forward', true);
     this.bot.setControlState('sprint', true);
-
     this.autoStop(4000);
   }
 
@@ -83,10 +72,7 @@ export class MovementManager {
       clearTimeout(this.moveTimeout);
       this.moveTimeout = null;
     }
-    this.bot.setControlState('forward', false);
-    this.bot.setControlState('back', false);
-    this.bot.setControlState('left', false);
-    this.bot.setControlState('right', false);
+    for (const dir of ALL_DIRS) this.bot.setControlState(dir, false);
     this.bot.setControlState('sprint', false);
   }
 

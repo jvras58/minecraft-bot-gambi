@@ -1,7 +1,6 @@
 /** Ciclo de vida do bot mineflayer (conexão, eventos, reconexão). */
 import mineflayer, { type Bot } from 'mineflayer';
 import type { BotConfig } from '@/types/types';
-import { MovementManager } from '@/bot/MovementManager';
 
 export class BotManager {
   private bot: Bot | null = null;
@@ -49,7 +48,11 @@ export class BotManager {
 
     this.bot.on('death', () => {
       console.log('💀 Morri! Respawnando...');
-      if (this.bot) new MovementManager(this.bot).pararMovimento();
+      if (this.bot) {
+        for (const s of ['forward', 'back', 'left', 'right', 'sprint'] as const) {
+          this.bot.setControlState(s, false);
+        }
+      }
     });
 
     this.bot.on('end', (reason) => {

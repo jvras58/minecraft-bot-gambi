@@ -3,7 +3,6 @@ import type { Bot } from 'mineflayer';
 import type { BotAction, ActionResult } from '@/types/types';
 import { MovementManager } from '@/bot/MovementManager';
 
-
 export class ActionExecutor {
   private bot: Bot;
   private movement: MovementManager;
