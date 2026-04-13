@@ -1,18 +1,4 @@
-/**
- * MemoryManager.ts
- *
- * Gerencia memória de curto prazo do bot (eventos, ações, interações).
- * Implementa ring buffer em memória, sem persistência.
- *
- * Principais classes:
- *   - MemoryManager: métodos para registrar eventos, ações, observações e gerar prompt.
- *
- * Extensão:
- *   - Expandir tipos de memória, persistência, integração com memória longa.
- *
- * Uso:
- *   Utilizado por AgentLoop para fornecer contexto recente ao LLM.
- */
+/** Ring buffer de memória de curto prazo do bot. */
 import type { MemoryEntry } from '@/types/types';
 import { agentConfig } from '@/config/settings';
 
@@ -29,7 +15,8 @@ export class MemoryManager {
     resumo: string,
     dados?: Record<string, unknown>,
   ): void {
-    this.entries.push({ timestamp: Date.now(), tipo, resumo, dados });
+    const acao = dados?.acao as string | undefined;
+    this.entries.push({ timestamp: Date.now(), tipo, resumo, acao, dados });
     if (this.entries.length > this.maxSize) {
       this.entries.shift();
     }
@@ -37,7 +24,7 @@ export class MemoryManager {
 
   recordAction(acao: string, sucesso: boolean, detalhe?: string): void {
     const status = sucesso ? '✓' : '✗';
-    this.add('acao', `[${status}] ${acao}${detalhe ? ': ' + detalhe : ''}`);
+    this.add('acao', `[${status}] ${acao}${detalhe ? ': ' + detalhe : ''}`, { acao });
   }
 
   recordEvent(evento: string): void {
@@ -66,11 +53,9 @@ export class MemoryManager {
   getActionCounts(): Record<string, number> {
     const counts: Record<string, number> = {};
     for (const e of this.entries) {
-      if (e.tipo !== 'acao') continue;
-        const match = e.resumo.match(/\[.\] (\w+)/);
-        if (match && typeof match[1] !== 'undefined') {
-          counts[match[1]] = (counts[match[1]] || 0) + 1;
-        }
+      if (e.tipo === 'acao' && e.acao) {
+        counts[e.acao] = (counts[e.acao] || 0) + 1;
+      }
     }
     return counts;
   }

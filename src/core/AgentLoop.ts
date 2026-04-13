@@ -1,18 +1,4 @@
-/**
- * AgentLoop.ts
- *
- * Loop principal do agente com fan-out benchmark.
- *
- * Cada ciclo:
- *   1. Percepção — captura estado do jogo
- *   2. Construção do prompt — monta UMA vez (system + contexto + memória)
- *   3. Fan-out — envia o MESMO prompt para TODOS os participantes em paralelo
- *   4. Parse — valida JSON de TODAS as respostas
- *   5. Seleção — escolhe a resposta mais rápida válida para executar
- *   6. Execução — executa a ação selecionada no jogo
- *   7. Memória — registra o que aconteceu
- *   8. Log — envia TODAS as respostas para Supabase (uma linha por participante)
- */
+/** Loop principal do agente: percepção → fan-out LLM → parse → execução → log. */
 import type { BotAction, ChatMessage, FanOutResult, GameContext, OnlineParticipant, ActionResult, CycleResponseData } from '@/types/types';
 import { BotManager } from '@/bot/BotManager';
 import { ActionExecutor } from '@/bot/ActionExecutor';
@@ -228,69 +214,38 @@ export class AgentLoop {
   // ─── Parse de Resposta ───────────────────────────────────
 
   private parseResponse(result: FanOutResult): ParsedResponse {
+    const base: ParsedResponse = {
+      participantId: result.participantId,
+      nickname: result.nickname,
+      modelName: result.modelName,
+      action: null,
+      responseTimeMs: result.response?.responseTimeMs ?? 0,
+      rawLength: result.response?.content.length ?? 0,
+      rawResponse: result.response?.content.slice(0, 500) ?? '',
+      jsonRepaired: false,
+      parseError: false,
+      llmError: null,
+    };
+
     if (result.error || !result.response) {
-      return {
-        participantId: result.participantId,
-        nickname: result.nickname,
-        modelName: result.modelName,
-        action: null,
-        responseTimeMs: result.response?.responseTimeMs ?? 0,
-        rawLength: 0,
-        rawResponse: '',
-        jsonRepaired: false,
-        parseError: false,
-        llmError: result.error,
-      };
+      return { ...base, llmError: result.error };
     }
 
     const { data, error, repaired } = safeParseJSON(result.response.content);
-
     if (!data || error) {
-      return {
-        participantId: result.participantId,
-        nickname: result.nickname,
-        modelName: result.modelName,
-        action: null,
-        responseTimeMs: result.response.responseTimeMs,
-        rawLength: result.response.content.length,
-        rawResponse: result.response.content.slice(0, 500),
-        jsonRepaired: false,
-        parseError: true,
-        llmError: null,
-      };
+      return { ...base, parseError: true };
     }
 
     try {
-      const normalized = typeof data === 'object' && data !== null ? normalizeAction(data as Record<string, unknown>) : data;
-      const action = botActionSchema.parse(normalized);
-      return {
-        participantId: result.participantId,
-        nickname: result.nickname,
-        modelName: result.modelName,
-        action,
-        responseTimeMs: result.response.responseTimeMs,
-        rawLength: result.response.content.length,
-        rawResponse: result.response.content.slice(0, 500),
-        jsonRepaired: repaired,
-        parseError: false,
-        llmError: null,
-      };
+      const normalized = typeof data === 'object' && data !== null
+        ? normalizeAction(data as Record<string, unknown>)
+        : data;
+      return { ...base, action: botActionSchema.parse(normalized), jsonRepaired: repaired };
     } catch (zodErr) {
       const zodMsg = zodErr instanceof Error ? zodErr.message : String(zodErr);
       console.log(`      🔍 Zod error: ${zodMsg.slice(0, 200)}`);
       console.log(`      🔍 Parsed data: ${JSON.stringify(data).slice(0, 300)}`);
-      return {
-        participantId: result.participantId,
-        nickname: result.nickname,
-        modelName: result.modelName,
-        action: null,
-        responseTimeMs: result.response.responseTimeMs,
-        rawLength: result.response.content.length,
-        rawResponse: result.response.content.slice(0, 500),
-        jsonRepaired: repaired,
-        parseError: true,
-        llmError: null,
-      };
+      return { ...base, jsonRepaired: repaired, parseError: true };
     }
   }
 

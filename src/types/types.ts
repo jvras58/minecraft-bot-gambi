@@ -1,8 +1,4 @@
-/**
- * types.ts
- *
- * Tipos globais do projeto — configuração, contexto, memória, LLM, fan-out.
- */
+/** Tipos globais do projeto. */
 
 // ─── Bot Config ───────────────────────────────────────────────
 export interface BotConfig {
@@ -56,6 +52,7 @@ export interface MemoryEntry {
   timestamp: number;
   tipo: 'acao' | 'evento' | 'observacao' | 'interacao';
   resumo: string;
+  acao?: string;
   dados?: Record<string, unknown>;
 }
 

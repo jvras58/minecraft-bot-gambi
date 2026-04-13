@@ -1,19 +1,4 @@
-/**
- * jsonParser.ts
- *
- * Utilitário para parse seguro de JSON, incluindo reparo automático usando jsonrepair.
- * Permite extrair e corrigir JSON de respostas brutas, especialmente vindas de LLMs.
- *
- * Principais funções:
- *   - safeParseJSON: tenta parsear e reparar JSON, retorna objeto com status.
- *   - extractJSON: extrai JSON de texto bruto, removendo code blocks e espaços.
- *
- * Extensão:
- *   - Aprimorar heurísticas de reparo, logging de erros ou suporte a outros formatos.
- *
- * Uso:
- *   Utilizado para validar e corrigir respostas da IA antes de processar ações.
- */
+/** Parse seguro de JSON com reparo automático (jsonrepair). */
 import { jsonrepair } from 'jsonrepair';
 
 export function safeParseJSON<T = unknown>(raw: string): { data: T | null; error: string | null; repaired: boolean } {

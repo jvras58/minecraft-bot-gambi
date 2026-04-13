@@ -1,10 +1,4 @@
-/**
- * DataLogger.ts
- *
- * Envia métricas do benchmark fan-out para Supabase via REST API.
- * Gerencia 3 tabelas: sessions, participant_snapshots, cycle_responses.
- * Fire-and-forget: não bloqueia o loop do bot.
- */
+/** Envia métricas para Supabase (fire-and-forget). */
 import type { OnlineParticipant, CycleResponseData } from '@/types/types';
 
 
@@ -140,49 +134,35 @@ export class DataLogger {
 
   // ─── Helpers HTTP ────────────────────────────────────────
 
-  private async insert<T extends object>(table: string, rows: T[]): Promise<void> {
+  private async request(method: string, table: string, body: unknown, filter?: string): Promise<void> {
     if (!this.supabaseUrl || !this.supabaseKey) return;
 
-    const url = `${this.supabaseUrl}/rest/v1/${table}`;
+    const url = filter
+      ? `${this.supabaseUrl}/rest/v1/${table}?${filter}`
+      : `${this.supabaseUrl}/rest/v1/${table}`;
+
     const response = await fetch(url, {
-      method: 'POST',
+      method,
       headers: {
         'Content-Type': 'application/json',
         apikey: this.supabaseKey,
         Authorization: `Bearer ${this.supabaseKey}`,
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify(rows),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`HTTP ${response.status}: ${body.slice(0, 300)}`);
+      const text = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
     }
   }
 
-  private async patch<T extends object>(
-    table: string,
-    filter: string,
-    data: T,
-  ): Promise<void> {
-    if (!this.supabaseUrl || !this.supabaseKey) return;
+  private insert<T extends object>(table: string, rows: T[]) {
+    return this.request('POST', table, rows);
+  }
 
-    const url = `${this.supabaseUrl}/rest/v1/${table}?${filter}`;
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: this.supabaseKey,
-        Authorization: `Bearer ${this.supabaseKey}`,
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`HTTP ${response.status}: ${body.slice(0, 300)}`);
-    }
+  private patch<T extends object>(table: string, filter: string, data: T) {
+    return this.request('PATCH', table, data, filter);
   }
 }
