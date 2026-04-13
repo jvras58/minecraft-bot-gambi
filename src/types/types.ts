@@ -10,9 +10,6 @@ export interface BotConfig {
   checkTimeoutInterval: number;
 }
 
-// ─── Actions (fonte da verdade: Zod schema) ──────────────
-export type { BotAction } from '@/schemas/botAction';
-
 // ─── Perception ───────────────────────────────────────────────
 export interface GameContext {
   vida: number;

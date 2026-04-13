@@ -1,5 +1,6 @@
 /** Loop principal do agente: percepção → fan-out LLM → parse → execução → log. */
-import type { BotAction, ChatMessage, FanOutResult, GameContext, OnlineParticipant, ActionResult, CycleResponseData } from '@/types/types';
+import type { ChatMessage, FanOutResult, GameContext, OnlineParticipant, ActionResult, CycleResponseData } from '@/types/types';
+import type { BotAction } from '@/schemas/botAction';
 import { BotManager } from '@/bot/BotManager';
 import { ActionExecutor } from '@/bot/ActionExecutor';
 import { PerceptionManager } from '@/bot/PerceptionManager';

@@ -1,6 +1,7 @@
 /** Traduz BotAction em comandos mineflayer. */
 import type { Bot } from 'mineflayer';
-import type { BotAction, ActionResult } from '@/types/types';
+import type { ActionResult } from '@/types/types';
+import type { BotAction } from '@/schemas/botAction';
 import { MovementManager } from '@/bot/MovementManager';
 
 export class ActionExecutor {
