@@ -1,18 +1,4 @@
-/**
- * BotManager.ts
- *
- * Gerencia ciclo de vida do bot Minecraft (conexão, eventos, respawn).
- * Responsável por criar, conectar e monitorar o bot, além de callbacks de conexão/desconexão.
- *
- * Principais classes:
- *   - BotManager: instancia bot, gerencia eventos, reconexão automática.
- *
- * Extensão:
- *   - Adicionar novos eventos ou customizar callbacks de conexão/desconexão.
- *
- * Uso:
- *   Utilizado por AgentLoop e index.ts para controle do bot.
- */
+/** Ciclo de vida do bot mineflayer (conexão, eventos, reconexão). */
 import mineflayer, { type Bot } from 'mineflayer';
 import type { BotConfig } from '@/types/types';
 import { MovementManager } from '@/bot/MovementManager';
