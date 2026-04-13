@@ -5,13 +5,13 @@ import { ActionExecutor } from '@/bot/ActionExecutor';
 import { PerceptionManager } from '@/bot/PerceptionManager';
 import { MemoryManager } from '@/core/MemoryManager';
 import { DataLogger } from '@/core/DataLogger';
-import { GambiLLM } from '../llm/GambiarraLLM';
-import { botActionSchema } from '../schemas/botAction';
-import { botPromptTemplate } from '../prompts/botPrompts';
-import { sleep } from '../utils/sleep';
-import { safeParseJSON } from '../utils/jsonParser';
-import { normalizeAction } from '../utils/fuzzyAction';
-import { agentConfig } from '../config/settings';
+import { GambiLLM } from '@/llm/GambiarraLLM';
+import { botActionSchema } from '@/schemas/botAction';
+import { botPromptTemplate } from '@/prompts/botPrompts';
+import { sleep } from '@/utils/sleep';
+import { safeParseJSON } from '@/utils/jsonParser';
+import { normalizeAction } from '@/utils/fuzzyAction';
+import { agentConfig } from '@/config/settings';
 
 /** Resposta parseada de um participante */
 interface ParsedResponse {
