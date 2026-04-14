@@ -1,16 +1,18 @@
-/** Cliente Gambi Hub com fan-out para todos os participantes. */
+/** Cliente Gambi Hub — 1 bot = 1 participante. */
 import { createGambi, type GambiProvider } from 'gambi-sdk';
 import { generateText } from 'ai';
-import type { ChatMessage, FanOutResult, OnlineParticipant } from '@/types/types';
+import type { ChatMessage, LLMResponse, OnlineParticipant } from '@/types/types';
 import { agentConfig } from '@/config/settings';
 
 export interface GambiLLMOptions {
   roomCode: string;
   hubUrl?: string;
+  participantId: string;
 }
 
 export class GambiLLM {
   private provider: GambiProvider;
+  private participantId: string;
 
   constructor(options: GambiLLMOptions) {
     this.provider = createGambi({
@@ -18,6 +20,27 @@ export class GambiLLM {
       hubUrl: options.hubUrl ?? 'http://localhost:3000',
       defaultProtocol: 'chatCompletions',
     });
+    this.participantId = options.participantId;
+  }
+
+  async invoke(messages: ChatMessage[]): Promise<LLMResponse> {
+    const { system, userMessages } = this.splitMessages(messages);
+    const start = performance.now();
+
+    const result = await Promise.race([
+      generateText({
+        model: this.provider.participant(this.participantId),
+        system,
+        messages: userMessages,
+        temperature: 0.8,
+      }),
+      this.timeout(agentConfig.llmTimeoutMs),
+    ]);
+
+    return {
+      content: (result as any).text,
+      responseTimeMs: performance.now() - start,
+    };
   }
 
   async getOnlineParticipants(): Promise<OnlineParticipant[]> {
@@ -42,46 +65,6 @@ export class GambiLLM {
         endpoint: m.endpoint,
       }));
     }
-  }
-
-  async invokeAll(
-    messages: ChatMessage[],
-    participants: OnlineParticipant[],
-  ): Promise<FanOutResult[]> {
-    const { system, userMessages } = this.splitMessages(messages);
-
-    const tasks = participants.map(async (p): Promise<FanOutResult> => {
-      try {
-        const start = performance.now();
-        const result = await Promise.race([
-          generateText({
-            model: this.provider.participant(p.id),
-            system,
-            messages: userMessages,
-            temperature: 0.8,
-          }),
-          this.timeout(agentConfig.fanOutTimeoutMs),
-        ]);
-
-        return {
-          participantId: p.id,
-          nickname: p.nickname,
-          modelName: p.model,
-          response: { content: (result as any).text, responseTimeMs: performance.now() - start },
-          error: null,
-        };
-      } catch (err) {
-        return {
-          participantId: p.id,
-          nickname: p.nickname,
-          modelName: p.model,
-          response: null,
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-    });
-
-    return Promise.all(tasks);
   }
 
   async healthCheck(): Promise<{ ok: boolean; participants: number }> {
