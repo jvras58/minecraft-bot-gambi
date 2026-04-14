@@ -1,34 +1,32 @@
-/**
- * index.ts
- *
- * Ponto de entrada do bot Minecraft com IA (modo fan-out benchmark).
- * O bot envia o mesmo prompt para TODOS os participantes da sala
- * e loga todas as respostas no Supabase para análise comparativa.
- */
+/** Ponto de entrada — cada instância controla 1 bot com 1 LLM. */
 import { botConfig, gambiarraConfig } from '@/config/settings';
 import { BotManager } from '@/bot/BotManager';
 import { AgentLoop } from '@/core/AgentLoop';
 import { GambiLLM } from '@/llm/GambiarraLLM';
+import { DataLogger } from '@/core/DataLogger';
 import { sleep } from '@/utils/sleep';
 import { parseArgs } from '@/utils/args';
+import type { OnlineParticipant } from '@/types/types';
 
 function printUsage(): void {
   console.log(`
-🤖 Minecraft Bot — Benchmark Fan-out (via Gambi Hub)
+🤖 Minecraft Bot — Agente Autônomo (via Gambi Hub)
 
-O bot envia o MESMO prompt para TODOS os participantes da sala em paralelo.
-Cada resposta é logada no Supabase para análise comparativa modelo × hardware.
+Cada instância controla 1 bot no Minecraft usando 1 LLM participante.
+Métricas são coletadas no Supabase para análise comparativa.
 
 Uso:
   bun run dev -- --room <ROOM_CODE> [opções]
 
 Opções:
-  --room, -r <code>    Código da sala Gambi (obrigatório)
-  --hub <url>          URL do hub (default: ${gambiarraConfig.hubUrl})
-  --help, -h           Mostra esta ajuda
+  --room, -r <code>          Código da sala Gambi (obrigatório)
+  --participant, -p <name>   Nickname ou ID do participante (opcional — auto-detecta se só tem 1)
+  --hub <url>                URL do hub (default: ${gambiarraConfig.hubUrl})
+  --help, -h                 Mostra esta ajuda
 
 Exemplo:
   bun run dev -- --room ABC123
+  bun run dev -- --room ABC123 -p meu-pc
   bun run dev -- --room ABC123 --hub http://192.168.1.10:3000
 
 Variáveis de ambiente:
@@ -38,6 +36,51 @@ Variáveis de ambiente:
   MINECRAFT_PORT       Porta do servidor (default: 25565)
   BOT_USERNAME         Nome do bot (default: AgenteBot)
 `);
+}
+
+/** Resolve qual participante este bot vai usar. */
+async function resolveParticipant(
+  llm: GambiLLM,
+  hint?: string | null,
+): Promise<OnlineParticipant> {
+  const participants = await llm.getOnlineParticipants();
+
+  if (participants.length === 0) {
+    console.error('❌ Nenhum participante online na sala!');
+    console.error('   Rode primeiro: gambi join --code <ROOM> --model <MODEL>');
+    process.exit(1);
+  }
+
+  // Se especificou, busca por nickname ou ID
+  if (hint) {
+    const search = hint.toLowerCase();
+    const found = participants.find(
+      (p) => p.nickname.toLowerCase() === search || p.id.toLowerCase() === search,
+    );
+    if (!found) {
+      console.error(`❌ Participante "${hint}" não encontrado!\n`);
+      console.error('   Participantes online:');
+      for (const p of participants) {
+        console.error(`     - ${p.nickname} (${p.model}) [ID: ${p.id}]`);
+      }
+      process.exit(1);
+    }
+    return found;
+  }
+
+  // Auto-detecta se só tem 1
+  if (participants.length === 1) {
+    console.log(`🔍 Auto-detectado: ${participants[0]!.nickname} (${participants[0]!.model})`);
+    return participants[0]!;
+  }
+
+  // Múltiplos: precisa especificar
+  console.error(`❌ ${participants.length} participantes online — especifique qual usar com --participant\n`);
+  console.error('   Participantes online:');
+  for (const p of participants) {
+    console.error(`     - ${p.nickname} (${p.model}) [ID: ${p.id}]`);
+  }
+  process.exit(1);
 }
 
 async function main(): Promise<void> {
@@ -59,29 +102,33 @@ async function main(): Promise<void> {
   const roomCode = args.room;
   const hubUrl = args.hub ?? gambiarraConfig.hubUrl;
 
-  console.log('🤖 Minecraft Bot — Benchmark Fan-out\n');
+  console.log('🤖 Minecraft Bot — Agente Autônomo\n');
   console.log(`   Sala: ${roomCode}`);
-  console.log(`   Hub:  ${hubUrl}`);
-  console.log(`   Modo: fan-out (todos os participantes)\n`);
+  console.log(`   Hub:  ${hubUrl}\n`);
 
-  // Inicializa o cliente LLM
-  const llm = new GambiLLM({ roomCode, hubUrl });
+  // Resolve participante
+  const tempLlm = new GambiLLM({ roomCode, hubUrl, participantId: '' });
+  const participant = await resolveParticipant(tempLlm, args.participant);
 
-  // Verifica hub
-  console.log('🔍 Verificando conexão com Gambi Hub...');
-  const health = await llm.healthCheck();
-  if (!health.ok) {
-    console.error('⚠️  Hub não acessível ou sala sem participantes!');
-    console.error('   Continuando mesmo assim (participantes podem entrar depois)...\n');
-  } else {
-    console.log(`✅ Hub OK — ${health.participants} participante(s) na sala\n`);
-  }
+  const gpu = participant.specs?.gpu ?? '?';
+  const ram = participant.specs?.ram ?? '?';
+  console.log(`✅ Participante: ${participant.nickname} — ${participant.model} (GPU: ${gpu}, RAM: ${ram})\n`);
 
-  // Inicializa o bot Minecraft
+  // Cria LLM configurado pro participante
+  const llm = new GambiLLM({ roomCode, hubUrl, participantId: participant.id });
+
+  // Registra snapshot do participante
+  const logger = new DataLogger();
+  await logger.logParticipantSnapshot(crypto.randomUUID(), participant);
+
+  // Inicializa bot Minecraft
   const botManager = new BotManager(botConfig);
   const agent = new AgentLoop(botManager, llm, {
     roomCode,
     botUsername: botConfig.username,
+    participantId: participant.id,
+    participantNickname: participant.nickname,
+    modelName: participant.model,
   });
 
   // Graceful shutdown
