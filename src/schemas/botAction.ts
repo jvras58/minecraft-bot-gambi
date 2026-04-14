@@ -1,19 +1,4 @@
-/**
- * botAction.ts
- *
- * Define o schema Zod para validação das ações do bot Minecraft.
- * Garante que apenas ações válidas e bem formatadas sejam executadas.
- *
- * Principais objetos/tipos:
- *   - botActionSchema: validação de campos de ação.
- *   - BotAction: tipo inferido do schema.
- *
- * Extensão:
- *   - Adicione novas ações ou campos ao schema conforme expansão do bot.
- *
- * Uso:
- *   Utilizado por AgentLoop, ActionExecutor e tipos globais para garantir integridade das ações.
- */
+/** Schema Zod das ações do bot. */
 import { z } from 'zod';
 
 export const botActionSchema = z.object({
