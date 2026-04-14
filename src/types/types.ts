@@ -64,18 +64,7 @@ export interface LLMResponse {
   responseTimeMs: number;
 }
 
-// ─── Fan-out ──────────────────────────────────────────────────
-
-/** Resultado de uma chamada LLM a um participante específico */
-export interface FanOutResult {
-  participantId: string;
-  nickname: string;
-  modelName: string;
-  response: LLMResponse | null;
-  error: string | null;
-}
-
-/** Informações de um participante online (espelho do SDK) */
+// ─── Participante (usado no startup pra resolver --participant) ─
 export interface OnlineParticipant {
   id: string;
   nickname: string;
@@ -93,24 +82,20 @@ export interface OnlineParticipant {
 
 // ─── Data Logger ─────────────────────────────────────────────
 export interface CycleResponseData {
-  // Sessão & Ciclo
   session_id: string;
   cycle_number: number;
   room_code: string;
 
-  // Participante
   participant_id: string;
   participant_nickname: string;
   model_name: string;
 
-  // LLM
   llm_response_time_ms: number | null;
   llm_raw_length: number | null;
   llm_json_repaired: boolean;
   llm_parse_error: boolean;
   llm_error: string | null;
 
-  // Ação parseada
   action: string | null;
   reasoning: string | null;
   direction: string | null;
@@ -118,16 +103,12 @@ export interface CycleResponseData {
   content: string | null;
   raw_response: string | null;
 
-  // Execução
-  was_executed: boolean;
   action_success: boolean | null;
   action_execution_time_ms: number | null;
   action_error: string | null;
 
-  // Prompt enviado (mesmo para todos os participantes do ciclo)
   prompt_sent: string;
 
-  // Contexto do jogo
   health: number;
   food: number;
   pos_x: number;
@@ -149,7 +130,6 @@ export interface PromptTemplate {
   human: string;
 }
 
-// metricas de ações
 export interface ActionResult {
   success: boolean;
   action: string;
