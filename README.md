@@ -1,39 +1,50 @@
-# 🤖 Minecraft Bot — Benchmark Fan-out (via Gambi)
+# 🤖 Minecraft Bot — Agente Autônomo (via Gambi)
 
-Bot autônomo de Minecraft que usa o **Gambi** como hub de LLMs para benchmark comparativo. A cada ciclo de decisão, o bot envia o **mesmo prompt para TODOS os participantes** da sala em paralelo, coleta todas as respostas, executa a mais rápida e loga tudo no Supabase para análise.
+Bot autônomo de Minecraft controlado por LLM. Cada participante roda sua própria instância do bot com sua própria LLM, e todos jogam no mesmo servidor. Métricas são coletadas no Supabase para análise comparativa de modelos e hardware.
 
 ## Como Funciona
 
 ```
-┌──────────────┐      ┌──────────────────┐       ┌─────────────────┐
-│  Minecraft   │◄────▶│  Minecraft Bot   │◄────▶│   Gambi Hub     │
-│   Server     │      │  (este app)      │       │   (sala LLM)    │
-└──────────────┘      └──────────────────┘       └────────┬────────┘
-                              │                          │
-                              │                    ┌─────┴──────┐
-                              │               ┌────┤  Fan-out   ├────┐
-                              ▼               ▼    └────────────┘    ▼
-                      ┌──────────────┐  ┌──────────┐          ┌──────────┐
-                      │   Supabase   │  │ Máquina A│          │ Máquina B│
-                      │  (métricas)  │  │ llama3   │   ...    │ mistral  │
-                      └──────────────┘  │          │          │ GTX 1080 │
-                                        └──────────┘          └──────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    Servidor Minecraft                         │
+│                                                              │
+│   🤖 Bot PC1        🤖 Bot PC2        🤖 Bot PC3            │
+│   (AgenteBot1)      (AgenteBot2)      (AgenteBot3)          │
+└──────┬───────────────────┬───────────────────┬───────────────┘
+       │                   │                   │
+       ▼                   ▼                   ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│   Gambi Hub  │   │   Gambi Hub  │   │   Gambi Hub  │
+│   (sala)     │   │   (sala)     │   │   (sala)     │
+└──────┬───────┘   └──────┬───────┘   └──────┬───────┘
+       ▼                   ▼                   ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│  PC1         │   │  PC2         │   │  PC3         │
+│  llama3      │   │  mistral     │   │  qwen2       │
+│  RTX 4090    │   │  GTX 1080    │   │  M2 Pro      │
+└──────────────┘   └──────────────┘   └──────────────┘
+       │                   │                   │
+       └───────────────────┴───────────────────┘
+                           │
+                    ┌──────────────┐
+                    │   Supabase   │
+                    │  (métricas)  │
+                    └──────────────┘
 ```
 
-O bot a cada ciclo (~3s):
+Cada bot a cada ciclo (~3s):
 1. **Percebe** o mundo (vida, fome, entidades, blocos, inventário)
-2. **Monta o prompt** uma única vez (system + contexto + memória)
-3. **Fan-out** — envia o mesmo prompt para todos os participantes em paralelo
-4. **Parseia** todas as respostas (JSON + validação Zod)
-5. **Seleciona** a resposta válida mais rápida
-6. **Executa** a ação no Minecraft
-7. **Loga** todas as respostas no Supabase (uma linha por participante por ciclo)
+2. **Monta o prompt** (system + contexto + memória)
+3. **Envia** para sua LLM (1 participante, 1 resposta)
+4. **Parseia** a resposta (JSON + validação Zod)
+5. **Executa** a ação no Minecraft
+6. **Loga** métricas no Supabase
 
 ## Pré-requisitos
 
 - **Bun** (runtime)
 - **Servidor Minecraft** Java Edition (Paper MC recomendado)
-- **Gambi Hub** rodando com 2+ participantes LLM na sala
+- **Gambi Hub** rodando
 - **Supabase** (opcional, para coleta de dados)
 
 ## Setup
@@ -45,17 +56,17 @@ O bot a cada ciclo (~3s):
 gambi serve --port 3000
 
 # Terminal 2 — criar sala
-gambi create --name "Benchmark AI"
+gambi create --name "Experimento TCC"
 # → Room code: ABC123
 
-# Cada pessoa com LLM entra na sala:
-# Máquina A
+# Cada pessoa entra na sala com sua LLM:
+# PC1
 gambi join --code ABC123 --model llama3
 
-# Máquina B
+# PC2
 gambi join --code ABC123 --model mistral --endpoint http://localhost:1234
 
-# Máquina C
+# PC3
 gambi join --code ABC123 --model qwen2
 ```
 
@@ -72,11 +83,18 @@ O `gambi join` compartilha automaticamente as specs da máquina (CPU, RAM, GPU).
 ### 3. Configure e execute
 
 ```bash
+# Em CADA máquina participante:
 cp .env.example .env
-# Edite .env com SUPABASE_URL e SUPABASE_ANON_KEY
+# Edite .env com SUPABASE_URL, SUPABASE_ANON_KEY e BOT_USERNAME
 
 bun install
 bun run dev -- --room ABC123
+```
+
+O bot auto-detecta qual participante usar (o que tá rodando na mesma máquina via `gambi join`). Se tiver ambiguidade, especifique:
+
+```bash
+bun run dev -- --room ABC123 --participant meu-pc
 ```
 
 ## CLI
@@ -85,18 +103,18 @@ bun run dev -- --room ABC123
 bun run dev -- --room <ROOM_CODE> [opções]
 
 Opções:
-  --room, -r <code>    Código da sala Gambi (obrigatório)
-  --hub <url>          URL do hub (default: http://localhost:3000)
-  --help, -h           Mostra ajuda
+  --room, -r <code>          Código da sala Gambi (obrigatório)
+  --participant, -p <name>   Nickname ou ID do participante (opcional — auto-detecta)
+  --hub <url>                URL do hub (default: http://localhost:3000)
+  --help, -h                 Mostra ajuda
 ```
-
-Não é necessário `--model` — o bot envia para **todos** os participantes automaticamente.
 
 ## Configuração
 
 | Origem | Variável / Flag | Descrição | Default |
 |--------|-----------------|-----------|---------|
 | CLI | `--room` | Código da sala | (obrigatório) |
+| CLI | `--participant` | Nickname do participante | (auto-detecta) |
 | CLI | `--hub` | URL do hub | `http://localhost:3000` |
 | .env | `SUPABASE_URL` | URL do Supabase | (desativado) |
 | .env | `SUPABASE_ANON_KEY` | Chave anônima | (desativado) |
@@ -110,9 +128,9 @@ Não é necessário `--model` — o bot envia para **todos** os participantes au
 
 | Tabela | Descrição |
 |--------|-----------|
-| `sessions` | Metadados de cada sessão de benchmark |
-| `participant_snapshots` | Specs de hardware de cada máquina (CPU, RAM, GPU, VRAM, OS) |
-| `cycle_responses` | Uma linha por participante por ciclo — latência, ação, se foi executada |
+| `sessions` | Metadados de cada sessão (sala, bot, participante, duração) |
+| `participant_snapshots` | Specs de hardware da máquina (CPU, RAM, GPU, VRAM, OS) |
+| `cycle_responses` | Uma linha por ciclo — latência, ação, resultado, prompt, contexto |
 
 ### Views de análise
 
@@ -125,20 +143,20 @@ Não é necessário `--model` — o bot envia para **todos** os participantes au
 
 ```
 src/
-├── index.ts                  # Bootstrap (modo fan-out)
+├── index.ts                  # Bootstrap, resolve participante, inicia loop
 ├── config/
-│   └── settings.ts           # Configurações (Gambi + Minecraft + Benchmark)
+│   └── settings.ts           # Configurações (Gambi + Minecraft + agente)
 ├── bot/                      # Camada Minecraft (Mineflayer)
 │   ├── ActionExecutor.ts     # Executa ações (FALAR, ANDAR, SEGUIR, etc.)
 │   ├── BotManager.ts         # Conexão e eventos do bot
 │   ├── MovementManager.ts    # Controle de movimento
 │   └── PerceptionManager.ts  # Percepção do ambiente
 ├── core/                     # Lógica principal
-│   ├── AgentLoop.ts          # Loop fan-out: prompt → todos → seleciona → executa
+│   ├── AgentLoop.ts          # Loop: percepção → LLM → parse → executa → log
 │   ├── MemoryManager.ts      # Memória de curto prazo (ring buffer)
-│   └── DataLogger.ts         # Envia métricas para Supabase (3 tabelas)
+│   └── DataLogger.ts         # Envia métricas para Supabase
 ├── llm/
-│   └── GambiarraLLM.ts       # Cliente LLM com invokeAll() para fan-out
+│   └── GambiarraLLM.ts       # Cliente LLM — invoke() para 1 participante
 ├── prompts/
 │   └── botPrompts.ts         # System prompt + template
 ├── schemas/
@@ -148,6 +166,7 @@ src/
 │   └── gambi-sdk.d.ts        # Tipos do SDK Gambi
 └── utils/
     ├── args.ts               # Parser CLI
+    ├── fuzzyAction.ts        # Normalização fuzzy de ações do LLM
     ├── jsonParser.ts          # Parse + reparo de JSON
     └── sleep.ts
 ```
@@ -171,22 +190,22 @@ src/
 ## Saída do Terminal
 
 ```
-🤖 Minecraft Bot — Benchmark Fan-out
+🤖 Minecraft Bot — Agente Autônomo
 
    Sala: ABC123
    Hub:  http://localhost:3000
-   Modo: fan-out (todos os participantes)
 
-🖥️  Participantes online (3):
-   joao — llama3 (GPU: NVIDIA RTX 4090, RAM: 32GB)
-   maria — mistral (GPU: NVIDIA GTX 1080, RAM: 16GB)
-   pedro — qwen2 (GPU: Apple M2 Pro, RAM: 16GB)
+🔍 Auto-detectado: joao (llama3)
+✅ Participante: joao — llama3 (GPU: NVIDIA RTX 4090, RAM: 32GB)
 
-━━━ Ciclo #1 (3 participantes) ━━━
-📡 Enviando prompt para todos os participantes...
-   joao [llama3]: ✅ EXPLORAR (842ms)
-   maria [mistral]: ✅ ANDAR (1203ms)
-   pedro [qwen2]: ✅ COLETAR (956ms)
-🏆 Selecionado: joao [llama3] — EXPLORAR (842ms)
-💭 Raciocínio: Estou num lugar novo, vou explorar para encontrar recursos
+🧠 Agente ativado — joao [llama3]
+📊 Session ID: a1b2c3d4-...
+
+━━━ Ciclo #1 ━━━
+✅ EXPLORAR (842ms)
+💭 Estou num lugar novo, vou explorar para encontrar recursos
+
+━━━ Ciclo #2 ━━━
+✅ COLETAR (765ms)
+💭 Vi madeira próxima, vou coletar para craftar ferramentas
 ```
