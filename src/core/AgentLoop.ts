@@ -1,5 +1,5 @@
-/** Loop principal do agente: percepção → fan-out LLM → parse → execução → log. */
-import type { ChatMessage, FanOutResult, GameContext, OnlineParticipant, ActionResult, CycleResponseData } from '@/types/types';
+/** Loop principal do agente: percepção → LLM → parse → execução → log. */
+import type { ChatMessage, LLMResponse, GameContext, ActionResult, CycleResponseData } from '@/types/types';
 import type { BotAction } from '@/schemas/botAction';
 import { BotManager } from '@/bot/BotManager';
 import { ActionExecutor } from '@/bot/ActionExecutor';
@@ -14,20 +14,6 @@ import { safeParseJSON } from '@/utils/jsonParser';
 import { normalizeAction } from '@/utils/fuzzyAction';
 import { agentConfig } from '@/config/settings';
 
-/** Resposta parseada de um participante */
-interface ParsedResponse {
-  participantId: string;
-  nickname: string;
-  modelName: string;
-  action: BotAction | null;
-  responseTimeMs: number;
-  rawLength: number;
-  rawResponse: string;
-  jsonRepaired: boolean;
-  parseError: boolean;
-  llmError: string | null;
-}
-
 export class AgentLoop {
   private botManager: BotManager;
   private llm: GambiLLM;
@@ -38,20 +24,20 @@ export class AgentLoop {
   private isRunning = false;
   private listenersAttached = false;
 
-  // Identificadores
   private sessionId: string;
   private botUsername: string;
   private roomCode: string;
+  private participantId: string;
+  private participantNickname: string;
+  private modelName: string;
   private cycleNumber = 0;
-
-  // Cache de participantes (atualizado periodicamente)
-  private participants: OnlineParticipant[] = [];
-  private lastParticipantRefresh = 0;
-  private readonly PARTICIPANT_REFRESH_INTERVAL = 30_000; // 30s
 
   constructor(botManager: BotManager, llm: GambiLLM, options: {
     roomCode: string;
     botUsername: string;
+    participantId: string;
+    participantNickname: string;
+    modelName: string;
   }) {
     this.botManager = botManager;
     this.llm = llm;
@@ -61,6 +47,9 @@ export class AgentLoop {
     this.sessionId = crypto.randomUUID();
     this.botUsername = options.botUsername;
     this.roomCode = options.roomCode;
+    this.participantId = options.participantId;
+    this.participantNickname = options.participantNickname;
+    this.modelName = options.modelName;
 
     this.botManager.setCallbacks(
       () => this.onConnected(),
@@ -69,32 +58,15 @@ export class AgentLoop {
   }
 
   async start(): Promise<void> {
-    console.log('🧠 Agente ativado (modo fan-out benchmark)');
+    console.log(`🧠 Agente ativado — ${this.participantNickname} [${this.modelName}]`);
     console.log(`📊 Session ID: ${this.sessionId}`);
 
-    // Captura participantes e specs iniciais
-    await this.refreshParticipants();
-
-    if (this.participants.length === 0) {
-      console.warn('⚠️  Nenhum participante online — o bot vai esperar até alguém entrar');
-    } else {
-      console.log(`\n🖥️  Participantes online (${this.participants.length}):`);
-      for (const p of this.participants) {
-        const gpu = p.specs?.gpu ?? '?';
-        const ram = p.specs?.ram ?? '?';
-        console.log(`   ${p.nickname} — ${p.model} (GPU: ${gpu}, RAM: ${ram})`);
-      }
-      console.log('');
-    }
-
-    // Registra sessão e specs no Supabase
     await this.logger.logSession({
       id: this.sessionId,
       room_code: this.roomCode,
       bot_username: this.botUsername,
-      participant_count: this.participants.length,
+      participant_id: this.participantId,
     });
-    await this.logger.logParticipantSnapshots(this.sessionId, this.participants);
 
     this.isRunning = true;
     this.loop();
@@ -119,64 +91,54 @@ export class AgentLoop {
       }
 
       try {
-        // Atualiza lista de participantes periodicamente
-        await this.maybeRefreshParticipants();
-
-        if (this.participants.length === 0) {
-          console.log('⏳ Aguardando participantes...');
-          await sleep(5000);
-          continue;
-        }
-
         this.cycleNumber++;
-        console.log(`\n━━━ Ciclo #${this.cycleNumber} (${this.participants.length} participantes) ━━━`);
+        console.log(`\n━━━ Ciclo #${this.cycleNumber} ━━━`);
 
         // 1. PERCEPÇÃO
         const contexto = this.perception.getContextString();
         const gameCtx = this.perception.getGameContext();
 
-        // 2. CONSTRUÇÃO DO PROMPT (uma vez só)
+        // 2. PROMPT
         const messages = this.buildMessages(contexto);
 
-        // 3. FAN-OUT — mesmo prompt pra todos
-        console.log('📡 Enviando prompt para todos os participantes...');
-        const fanOutResults = await this.llm.invokeAll(messages, this.participants);
-
-        // 4. PARSE de todas as respostas
-        const parsed = fanOutResults.map((r) => this.parseResponse(r));
-
-        // Log resumido
-        for (const p of parsed) {
-          const status = p.llmError
-            ? `❌ ${p.llmError.slice(0, 50)}`
-            : p.parseError
-              ? `⚠️  JSON inválido\n      📝 Raw: ${p.rawResponse.slice(0, 500)}`
-              : `✅ ${p.action?.acao ?? '?'} (${p.responseTimeMs.toFixed(0)}ms)`;
-          console.log(`   ${p.nickname} [${p.modelName}]: ${status}`);
+        // 3. LLM
+        let llmResponse: LLMResponse | null = null;
+        let llmError: string | null = null;
+        try {
+          llmResponse = await this.llm.invoke(messages);
+        } catch (err) {
+          llmError = err instanceof Error ? err.message : String(err);
+          console.error(`❌ LLM erro: ${llmError}`);
         }
 
-        // 5. SELEÇÃO — mais rápida válida
-        const selected = this.selectBest(parsed);
+        // 4. PARSE
+        const { action, rawResponse, rawLength, jsonRepaired, parseError } = this.parseResponse(llmResponse);
 
-        if (!selected) {
-          console.warn('⚠️  Nenhuma resposta válida — fallback EXPLORAR');
+        if (llmError || parseError) {
+          console.warn('⚠️  Resposta inválida — fallback EXPLORAR');
           const fallback: BotAction = { raciocinio: 'Fallback: sem resposta válida', acao: 'EXPLORAR' };
           await this.executor.executar(fallback);
-          this.memory.recordEvent('Nenhum participante retornou JSON válido');
+          this.memory.recordEvent('LLM não retornou JSON válido');
+
+          this.logCycle({
+            messages, gameCtx, llmResponse, llmError,
+            action: null, rawResponse, rawLength, jsonRepaired, parseError,
+            actionResult: null,
+          });
+
           await sleep(agentConfig.loopIntervalMs);
           continue;
         }
 
-        console.log(`🏆 Selecionado: ${selected.nickname} [${selected.modelName}] — ${selected.action!.acao} (${selected.responseTimeMs.toFixed(0)}ms)`);
-
-        if (selected.action!.raciocinio) {
-          console.log(`💭 Raciocínio: ${selected.action!.raciocinio}`);
+        console.log(`✅ ${action!.acao} (${llmResponse!.responseTimeMs.toFixed(0)}ms)`);
+        if (action!.raciocinio) {
+          console.log(`💭 ${action!.raciocinio}`);
         }
 
-        // 6. EXECUÇÃO
-        const actionResult = await this.executor.executar(selected.action!);
+        // 5. EXECUÇÃO
+        const actionResult = await this.executor.executar(action!);
 
-        // 7. MEMÓRIA
+        // 6. MEMÓRIA
         this.memory.recordAction(
           actionResult.action,
           actionResult.success,
@@ -187,8 +149,12 @@ export class AgentLoop {
           console.log(`⚠️  ${actionResult.action} falhou: ${actionResult.errorMessage}`);
         }
 
-        // 8. LOG — todas as respostas, marcando qual foi executada
-        this.logAllResponses(parsed, selected, actionResult, gameCtx, messages);
+        // 7. LOG
+        this.logCycle({
+          messages, gameCtx, llmResponse, llmError,
+          action, rawResponse, rawLength, jsonRepaired, parseError,
+          actionResult,
+        });
 
         await sleep(agentConfig.loopIntervalMs);
       } catch (err) {
@@ -214,146 +180,108 @@ export class AgentLoop {
 
   // ─── Parse de Resposta ───────────────────────────────────
 
-  private parseResponse(result: FanOutResult): ParsedResponse {
-    const base: ParsedResponse = {
-      participantId: result.participantId,
-      nickname: result.nickname,
-      modelName: result.modelName,
-      action: null,
-      responseTimeMs: result.response?.responseTimeMs ?? 0,
-      rawLength: result.response?.content.length ?? 0,
-      rawResponse: result.response?.content.slice(0, 500) ?? '',
-      jsonRepaired: false,
-      parseError: false,
-      llmError: null,
-    };
-
-    if (result.error || !result.response) {
-      return { ...base, llmError: result.error };
+  private parseResponse(response: LLMResponse | null) {
+    if (!response) {
+      return { action: null, rawResponse: '', rawLength: 0, jsonRepaired: false, parseError: false };
     }
 
-    const { data, error, repaired } = safeParseJSON(result.response.content);
+    const { data, error, repaired } = safeParseJSON(response.content);
+
     if (!data || error) {
-      return { ...base, parseError: true };
+      console.log(`⚠️  JSON inválido\n   📝 Raw: ${response.content.slice(0, 500)}`);
+      return {
+        action: null,
+        rawResponse: response.content.slice(0, 500),
+        rawLength: response.content.length,
+        jsonRepaired: false,
+        parseError: true,
+      };
     }
 
     try {
       const normalized = typeof data === 'object' && data !== null
         ? normalizeAction(data as Record<string, unknown>)
         : data;
-      return { ...base, action: botActionSchema.parse(normalized), jsonRepaired: repaired };
+      return {
+        action: botActionSchema.parse(normalized) as BotAction,
+        rawResponse: response.content.slice(0, 500),
+        rawLength: response.content.length,
+        jsonRepaired: repaired,
+        parseError: false,
+      };
     } catch (zodErr) {
       const zodMsg = zodErr instanceof Error ? zodErr.message : String(zodErr);
-      console.log(`      🔍 Zod error: ${zodMsg.slice(0, 200)}`);
-      console.log(`      🔍 Parsed data: ${JSON.stringify(data).slice(0, 300)}`);
-      return { ...base, jsonRepaired: repaired, parseError: true };
-    }
-  }
-
-  // ─── Seleção da Melhor Resposta ──────────────────────────
-
-  private selectBest(parsed: ParsedResponse[]): ParsedResponse | null {
-    const valid = parsed.filter((p) => p.action !== null && !p.llmError && !p.parseError);
-
-    if (valid.length === 0) return null;
-
-    if (agentConfig.selectionStrategy === 'random') {
-      return valid[Math.floor(Math.random() * valid.length)]!;
-    }
-
-    // 'fastest' — menor latência
-    return valid.reduce((best, curr) =>
-      curr.responseTimeMs < best.responseTimeMs ? curr : best,
-    );
-  }
-
-  // ─── Log de Todas as Respostas ───────────────────────────
-
-  private logAllResponses(
-    parsed: ParsedResponse[],
-    selected: ParsedResponse,
-    actionResult: ActionResult,
-    gameCtx: GameContext,
-    messages: ChatMessage[],
-  ): void {
-    const promptSent = messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n');
-
-    const rows: CycleResponseData[] = parsed.map((p) => {
-      const isSelected = p.participantId === selected.participantId;
-
+      console.log(`🔍 Zod error: ${zodMsg.slice(0, 200)}`);
       return {
-        session_id: this.sessionId,
-        cycle_number: this.cycleNumber,
-        room_code: this.roomCode,
-
-        participant_id: p.participantId,
-        participant_nickname: p.nickname,
-        model_name: p.modelName,
-
-        llm_response_time_ms: p.responseTimeMs || null,
-        llm_raw_length: p.rawLength || null,
-        llm_json_repaired: p.jsonRepaired,
-        llm_parse_error: p.parseError,
-        llm_error: p.llmError,
-
-        action: p.action?.acao ?? null,
-        reasoning: p.action?.raciocinio ?? null,
-        direction: p.action?.direcao ?? null,
-        target: p.action?.alvo ?? null,
-        content: p.action?.conteudo ?? null,
-        raw_response: p.rawResponse ?? null,
-
-        was_executed: isSelected,
-        action_success: isSelected ? actionResult.success : null,
-        action_execution_time_ms: isSelected ? actionResult.executionTimeMs : null,
-        action_error: isSelected ? (actionResult.errorMessage ?? null) : null,
-
-        prompt_sent: promptSent,
-
-        health: gameCtx.vida,
-        food: gameCtx.fome,
-        pos_x: gameCtx.posicao.x,
-        pos_y: gameCtx.posicao.y,
-        pos_z: gameCtx.posicao.z,
-        biome: gameCtx.bioma,
-        weather: gameCtx.clima,
-        time_of_day: gameCtx.horaDoDia,
-        is_moving: gameCtx.estaAndando,
-        nearby_players: gameCtx.jogadoresProximos.length,
-        nearby_entities: gameCtx.entidadesProximas.length,
-        nearby_blocks: gameCtx.blocosProximos.length,
-        inventory_items: gameCtx.inventario.length,
+        action: null,
+        rawResponse: response.content.slice(0, 500),
+        rawLength: response.content.length,
+        jsonRepaired: repaired,
+        parseError: true,
       };
-    });
-
-    this.logger.log(rows);
-  }
-
-  // ─── Refresh de Participantes ────────────────────────────
-
-  private async refreshParticipants(): Promise<void> {
-    try {
-      this.participants = await this.llm.getOnlineParticipants();
-      this.lastParticipantRefresh = Date.now();
-    } catch (err) {
-      console.warn('⚠️  Falha ao listar participantes:', err instanceof Error ? err.message : err);
     }
   }
 
-  private async maybeRefreshParticipants(): Promise<void> {
-    if (Date.now() - this.lastParticipantRefresh > this.PARTICIPANT_REFRESH_INTERVAL) {
-      const before = this.participants.length;
-      await this.refreshParticipants();
-      const after = this.participants.length;
+  // ─── Log do Ciclo ────────────────────────────────────────
 
-      if (after !== before) {
-        console.log(`🔄 Participantes atualizados: ${before} → ${after}`);
-        // Se novos participantes entraram, registra specs deles
-        if (after > before) {
-          await this.logger.logParticipantSnapshots(this.sessionId, this.participants);
-        }
-      }
-    }
+  private logCycle(data: {
+    messages: ChatMessage[];
+    gameCtx: GameContext;
+    llmResponse: LLMResponse | null;
+    llmError: string | null;
+    action: BotAction | null;
+    rawResponse: string;
+    rawLength: number;
+    jsonRepaired: boolean;
+    parseError: boolean;
+    actionResult: ActionResult | null;
+  }): void {
+    const promptSent = data.messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n');
+
+    const row: CycleResponseData = {
+      session_id: this.sessionId,
+      cycle_number: this.cycleNumber,
+      room_code: this.roomCode,
+
+      participant_id: this.participantId,
+      participant_nickname: this.participantNickname,
+      model_name: this.modelName,
+
+      llm_response_time_ms: data.llmResponse?.responseTimeMs ?? null,
+      llm_raw_length: data.rawLength || null,
+      llm_json_repaired: data.jsonRepaired,
+      llm_parse_error: data.parseError,
+      llm_error: data.llmError,
+
+      action: data.action?.acao ?? null,
+      reasoning: data.action?.raciocinio ?? null,
+      direction: data.action?.direcao ?? null,
+      target: data.action?.alvo ?? null,
+      content: data.action?.conteudo ?? null,
+      raw_response: data.rawResponse || null,
+
+      action_success: data.actionResult?.success ?? null,
+      action_execution_time_ms: data.actionResult?.executionTimeMs ?? null,
+      action_error: data.actionResult?.errorMessage ?? null,
+
+      prompt_sent: promptSent,
+
+      health: data.gameCtx.vida,
+      food: data.gameCtx.fome,
+      pos_x: data.gameCtx.posicao.x,
+      pos_y: data.gameCtx.posicao.y,
+      pos_z: data.gameCtx.posicao.z,
+      biome: data.gameCtx.bioma,
+      weather: data.gameCtx.clima,
+      time_of_day: data.gameCtx.horaDoDia,
+      is_moving: data.gameCtx.estaAndando,
+      nearby_players: data.gameCtx.jogadoresProximos.length,
+      nearby_entities: data.gameCtx.entidadesProximas.length,
+      nearby_blocks: data.gameCtx.blocosProximos.length,
+      inventory_items: data.gameCtx.inventario.length,
+    };
+
+    this.logger.log(row);
   }
 
   // ─── Callbacks de Conexão ────────────────────────────────
