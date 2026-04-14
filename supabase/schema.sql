@@ -1,19 +1,21 @@
 -- ============================================================
--- Schema para coleta de dados do benchmark fan-out
+-- Schema para coleta de dados do experimento
 -- Três tabelas: sessions, participant_snapshots, cycle_responses
+-- Cada bot (1 LLM) gera 1 linha por ciclo em cycle_responses
 -- ============================================================
 
--- 1. Metadados de cada sessão de benchmark
+-- 1. Metadados de cada sessão (1 sessão = 1 execução do bot)
 CREATE TABLE sessions (
   id uuid PRIMARY KEY,
   room_code text NOT NULL,
   bot_username text NOT NULL,
-  participant_count integer DEFAULT 0,
+  participant_id text,
+  total_cycles integer,
   started_at timestamptz DEFAULT now(),
   ended_at timestamptz
 );
 
--- 2. Snapshot das specs de cada máquina no início da sessão
+-- 2. Snapshot das specs da máquina no início da sessão
 --    Capturado via gambi.listParticipants() que retorna specs (CPU, RAM, GPU)
 CREATE TABLE participant_snapshots (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -34,8 +36,7 @@ CREATE TABLE participant_snapshots (
   UNIQUE(session_id, participant_id)
 );
 
--- 3. Uma linha por participante por ciclo
---    Se 4 máquinas estão online, cada ciclo gera 4 linhas
+-- 3. Uma linha por ciclo por bot (~3s cada)
 CREATE TABLE cycle_responses (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
   created_at timestamptz DEFAULT now(),
@@ -65,13 +66,15 @@ CREATE TABLE cycle_responses (
   content text,
   raw_response text,
 
-  -- ─── Execução (só a resposta escolhida tem esses campos) ─
-  was_executed boolean DEFAULT false,
+  -- ─── Execução ────────────────────────────────────────────
   action_success boolean,
   action_execution_time_ms numeric,
   action_error text,
 
-  -- ─── Contexto do Jogo (igual pra todos no mesmo ciclo) ──
+  -- ─── Prompt enviado (contexto + memória deste ciclo) ─────
+  prompt_sent text,
+
+  -- ─── Contexto do Jogo ────────────────────────────────────
   health numeric,
   food numeric,
   pos_x numeric,
@@ -84,10 +87,7 @@ CREATE TABLE cycle_responses (
   nearby_players integer,
   nearby_entities integer,
   nearby_blocks integer,
-  inventory_items integer,
-
-  -- ─── Prompt -──
-  prompt_sent TEXT
+  inventory_items integer
 );
 
 -- ─── Índices para consultas comuns ─────────────────────────
@@ -136,15 +136,27 @@ JOIN participant_snapshots ps
 WHERE cr.llm_error IS NULL
 GROUP BY cr.model_name, ps.gpu, ps.vram, ps.ram;
 
--- Qual setup "ganhou" cada ciclo (menor latência válida)
-CREATE VIEW v_fastest_per_cycle AS
-SELECT DISTINCT ON (session_id, cycle_number)
-  session_id,
-  cycle_number,
-  participant_id,
-  participant_nickname,
-  model_name,
-  llm_response_time_ms
-FROM cycle_responses
-WHERE llm_error IS NULL AND NOT llm_parse_error
-ORDER BY session_id, cycle_number, llm_response_time_ms ASC;
+-- Resumo por sessão (útil pra comparar execuções)
+CREATE VIEW v_session_summary AS
+SELECT
+  s.id AS session_id,
+  s.room_code,
+  s.bot_username,
+  s.participant_id,
+  ps.model_name,
+  ps.gpu,
+  ps.ram,
+  s.total_cycles,
+  s.started_at,
+  s.ended_at,
+  ROUND(AVG(cr.llm_response_time_ms)::numeric, 1) AS avg_latency_ms,
+  ROUND(AVG(CASE WHEN cr.llm_parse_error THEN 0 ELSE 1 END)::numeric * 100, 1) AS valid_json_pct,
+  ROUND(AVG(CASE WHEN cr.action_success THEN 1 ELSE 0 END)::numeric * 100, 1) AS action_success_pct,
+  COUNT(cr.id) AS logged_cycles
+FROM sessions s
+LEFT JOIN participant_snapshots ps
+  ON s.id = ps.session_id
+LEFT JOIN cycle_responses cr
+  ON s.id = cr.session_id
+GROUP BY s.id, s.room_code, s.bot_username, s.participant_id,
+         ps.model_name, ps.gpu, ps.ram, s.total_cycles, s.started_at, s.ended_at;
