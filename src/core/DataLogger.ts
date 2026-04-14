@@ -1,8 +1,6 @@
 /** Envia métricas para Supabase (fire-and-forget). */
 import type { OnlineParticipant, CycleResponseData } from '@/types/types';
 
-
-
 const BATCH_SIZE = 20;
 const FLUSH_INTERVAL_MS = 15_000;
 
@@ -26,14 +24,11 @@ export class DataLogger {
     }
   }
 
-  /**
-   * Registra a sessão no banco (chamado uma vez no início).
-   */
   async logSession(session: {
     id: string;
     room_code: string;
     bot_username: string;
-    participant_count: number;
+    participant_id: string;
   }): Promise<void> {
     if (!this.enabled) return;
     await this.insert('sessions', [session]).catch((err) =>
@@ -41,49 +36,41 @@ export class DataLogger {
     );
   }
 
-  /**
-   * Registra snapshot das specs de cada participante (chamado uma vez no início).
-   */
-  async logParticipantSnapshots(
+  async logParticipantSnapshot(
     sessionId: string,
-    participants: OnlineParticipant[],
+    participant: OnlineParticipant,
   ): Promise<void> {
-    if (!this.enabled || participants.length === 0) return;
+    if (!this.enabled) return;
 
-    const rows = participants.map((p) => ({
+    const row = {
       session_id: sessionId,
-      participant_id: p.id,
-      nickname: p.nickname,
-      model_name: p.model,
-      endpoint: p.endpoint,
-      cpu: p.specs?.cpu ?? null,
-      ram: p.specs?.ram ?? null,
-      gpu: p.specs?.gpu ?? null,
-      vram: p.specs?.vram ?? null,
-      os: p.specs?.os ?? null,
-      specs_raw: p.specs ? JSON.stringify(p.specs) : null,
-    }));
+      participant_id: participant.id,
+      nickname: participant.nickname,
+      model_name: participant.model,
+      endpoint: participant.endpoint,
+      cpu: participant.specs?.cpu ?? null,
+      ram: participant.specs?.ram ?? null,
+      gpu: participant.specs?.gpu ?? null,
+      vram: participant.specs?.vram ?? null,
+      os: participant.specs?.os ?? null,
+      specs_raw: participant.specs ? JSON.stringify(participant.specs) : null,
+    };
 
-    await this.insert('participant_snapshots', rows).catch((err) =>
+    await this.insert('participant_snapshots', [row]).catch((err) =>
       console.warn(`📊 Falha ao registrar specs: ${err instanceof Error ? err.message : err}`),
     );
   }
 
-  /**
-   * Registra respostas de um ciclo (múltiplas linhas, uma por participante).
-   */
-  log(data: CycleResponseData[]): void {
-    if (!this.enabled || data.length === 0) return;
-    this.buffer.push(...data);
+  /** Registra dados de um ciclo. */
+  log(data: CycleResponseData): void {
+    if (!this.enabled) return;
+    this.buffer.push(data);
 
     if (this.buffer.length >= BATCH_SIZE) {
       this.flush();
     }
   }
 
-  /**
-   * Envia buffer acumulado para Supabase. Fire-and-forget.
-   */
   flush(): void {
     if (!this.enabled || this.buffer.length === 0) return;
 
@@ -96,9 +83,6 @@ export class DataLogger {
     });
   }
 
-  /**
-   * Atualiza sessão com ended_at e total_cycles.
-   */
   async endSession(sessionId: string, totalCycles: number): Promise<void> {
     if (!this.enabled) return;
     await this.patch('sessions', `id=eq.${sessionId}`, {
@@ -109,9 +93,6 @@ export class DataLogger {
     );
   }
 
-  /**
-   * Flush final e cleanup.
-   */
   async shutdown(sessionId?: string, totalCycles?: number): Promise<void> {
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
