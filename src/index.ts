@@ -122,10 +122,14 @@ async function main(): Promise<void> {
   await logger.logParticipantSnapshot(crypto.randomUUID(), participant);
 
   // Inicializa bot Minecraft
-  const botManager = new BotManager(botConfig);
+    const botConfigWithParticipant: typeof botConfig = {
+    ...botConfig,
+    username: participant.id,
+  };
+  const botManager = new BotManager(botConfigWithParticipant);
   const agent = new AgentLoop(botManager, llm, {
     roomCode,
-    botUsername: botConfig.username,
+    botUsername: participant.id,
     participantId: participant.id,
     participantNickname: participant.nickname,
     modelName: participant.model,
