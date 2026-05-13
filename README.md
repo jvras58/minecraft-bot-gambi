@@ -61,24 +61,14 @@ gambi room create --name "Experimento TCC"
 
 # Cada pessoa entra na sala com sua LLM:
 # PC1
-gambi participant join \
-  --room ABC123 \
-  --participant-id joao-1 \
-  --model llama3
+gambi participant join --room ABC123 --participant-id joao-1 --model llama3
 
 # PC2
-gambi participant join \
-  --room ABC123 \
-  --participant-id jonh-2 \
-  --model mistral
-  --endpoint http://localhost:1234
+gambi participant join --room ABC123 --participant-id jonh-2 --model mistral --endpoint http://localhost:1234
 
 
 # PC3
-gambi participant join \
-  --room ABC123 \
-  --participant-id jonh-2 \
-  --model qwen2
+gambi participant join --room ABC123 --participant-id jonh-2 --model qwen2
 ```
 
 O `gambi participant join` compartilha automaticamente as specs da máquina (CPU, RAM, GPU).
