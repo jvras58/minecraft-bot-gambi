@@ -63,7 +63,7 @@ Cada bot a cada ciclo (~3s):
 gambi hub serve --port 3000 --mdns
 
 # Terminal 2 — criar sala
-gambi room create --name "Experimento TCC"
+gambi room create --name "Experimento 1"
 # → Room code: ABC123
 
 # Cada pessoa entra na sala com sua LLM:
