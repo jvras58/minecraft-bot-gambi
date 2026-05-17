@@ -159,11 +159,16 @@ export class ActionExecutor {
       throw new Error(`Nenhum tipo de bloco corresponde a "${alvo}"`);
     }
 
-    const block = this.bot.findBlock({ matching: ids, maxDistance: 32 });
+    const block = this.bot.findBlock({ matching: ids, maxDistance: 16 });
     if (!block) {
-      throw new Error(`Nenhum bloco ${alvo ?? 'notável'} encontrado num raio de 32m`);
+      throw new Error(`Nenhum bloco ${alvo ?? 'notável'} encontrado num raio de 16m`);
     }
 
+    const dist = this.bot.entity.position.distanceTo(block.position);
+    console.log(`⛏️  Alvo: ${block.name} a ${dist.toFixed(1)}m — navegando...`);
+    await this.movement.irPara(block.position.x, block.position.y, block.position.z, 2);
+
+    console.log(`⛏️  Cheguei perto — cavando ${block.name}...`);
     await this.bot.tool.equipForBlock(block, {});
     await this.bot.collectBlock.collect(block);
     console.log(`⛏️  Coletei ${block.name}`);
